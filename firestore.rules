@@ -1,191 +1,62 @@
-/**
- * LedgerStream Firestore Security Rules
- *
- * CORE PHILOSOPHY:
- * This ruleset enforces a strict multi-tenant and user-ownership model designed for a 
- * financial application. Security is centered around "Authorization Independence," 
- * where access is verified via direct path matching or membership checks rather 
- * than traversing complex document relationships.
- *
- * DATA STRUCTURE:
- * 1. Private User Data: Nested under `/users/{userId}`.
- * 2. Multi-Tenant Financial Data: All business-related entities (Invoices, Expenses, 
- *    Accounts, Contacts) are nested under `/organizations/{organizationId}`.
- * 3. Membership & Roles: User access to an organization is defined in the 
- *    `/organizations/{organizationId}/members/{userId}` subcollection.
- * 4. Reference Data: System-wide roles are stored in the `/roles` collection.
- *
- * KEY SECURITY DECISIONS:
- * - Ownership Model: Users have full control over their own profile documents.
- * - Membership Model: Access to any document under an `/organizations/` path 
- *   requires a corresponding document in that organization's `members` subcollection.
- * - Denormalization for Authorization: Critical IDs (like `organizationId`) are 
- *   enforced in the data to match the path structure, ensuring query performance 
- *   and consistent authorization checks.
- * - Read-Only Reference: Global roles are readable by any authenticated user 
- *   but are not modifiable through the client.
- */
 
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Helper Functions ---
-
-    /**
-     * @description Checks if a user is authenticated.
-     */
+    // --- Helpers ---
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /**
-     * @description Checks if the authenticated user's UID matches the provided ID.
-     */
-    function isOwner(userId) {
+    function isUser(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    /**
-     * @description Combined ownership and existence check for updates and deletes.
-     */
-    function isExistingOwner(userId) {
-      return resource != null && isOwner(userId);
+    function getMember(orgId) {
+      return get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data;
     }
 
-    /**
-     * @description Checks if the authenticated user is a registered member of an organization.
-     */
     function isMember(orgId) {
       return isSignedIn() && exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid));
     }
 
-    /**
-     * @description Verifies if a user is a member and the document exists.
-     */
-    function isExistingMember(orgId) {
-      return resource != null && isMember(orgId);
+    function hasRole(orgId, roles) {
+      return isMember(orgId) && getMember(orgId).role in roles;
     }
 
-    // --- Collection Rules ---
-
-    /**
-     * @description Rules for user profiles. Users can only manage their own data.
-     * @path /users/{userId}
-     * @allow (get, list, create, update) Auth UID matches {userId}.
-     * @deny (get) Auth UID does not match {userId}.
-     * @principle Path-based ownership.
-     */
+    // --- Users ---
     match /users/{userId} {
-      allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Global role definitions. System-wide reference data.
-     * @path /roles/{roleId}
-     * @allow (get, list) Any authenticated user.
-     * @deny (create, update, delete) All client-side writes.
-     * @principle Read-only reference data for authenticated users.
-     */
-    match /roles/{roleId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
+      allow create, update: if isUser(userId);
     }
 
-    /**
-     * @description Core organization tenant data.
-     * @path /organizations/{organizationId}
-     * @allow (get, list, update) If the user is a member of the organization.
-     * @allow (create) Any authenticated user can create an organization.
-     * @deny (delete) Organizations cannot be deleted by clients.
-     * @principle Shared access based on membership.
-     */
+    // --- Organizations ---
     match /organizations/{organizationId} {
-      allow get, list: if isMember(organizationId);
+      allow get: if isMember(organizationId);
       allow create: if isSignedIn();
-      allow update: if isExistingMember(organizationId);
-      allow delete: if false;
+      allow update: if hasRole(organizationId, ['admin']);
 
-      /**
-       * @description Membership documents defining user roles within an organization.
-       * @path /organizations/{organizationId}/members/{userId}
-       * @allow (get, list) Any member of the organization.
-       * @allow (create, update, delete) For prototyping, members can manage membership.
-       * @principle Collaborative membership management within a tenant.
-       */
       match /members/{userId} {
-        allow get, list: if isMember(organizationId);
-        allow create: if isMember(organizationId) && request.resource.data.userId == userId;
-        allow update: if isExistingMember(organizationId) && request.resource.data.userId == resource.data.userId;
-        allow delete: if isExistingMember(organizationId);
+        allow read: if isMember(organizationId);
+        allow create, update, delete: if hasRole(organizationId, ['admin']);
       }
 
-      /**
-       * @description Contact records (Customers/Vendors) for the organization.
-       * @path /organizations/{organizationId}/contacts/{contactId}
-       * @allow (get, list, create, update, delete) Any organization member.
-       * @principle Multi-tenant data isolation.
-       */
       match /contacts/{contactId} {
-        allow get, list: if isMember(organizationId);
-        allow create: if isMember(organizationId) && request.resource.data.organizationId == organizationId;
-        allow update: if isExistingMember(organizationId) && request.resource.data.organizationId == resource.data.organizationId;
-        allow delete: if isExistingMember(organizationId);
+        allow read: if isMember(organizationId);
+        allow write: if hasRole(organizationId, ['admin', 'manager', 'cashier']);
       }
 
-      /**
-       * @description Chart of accounts for the organization.
-       * @path /organizations/{organizationId}/accounts/{accountId}
-       * @allow (get, list, create, update, delete) Any organization member.
-       * @principle Multi-tenant data isolation.
-       */
-      match /accounts/{accountId} {
-        allow get, list: if isMember(organizationId);
-        allow create: if isMember(organizationId) && request.resource.data.organizationId == organizationId;
-        allow update: if isExistingMember(organizationId) && request.resource.data.organizationId == resource.data.organizationId;
-        allow delete: if isExistingMember(organizationId);
-      }
-
-      /**
-       * @description Invoices issued by the organization.
-       * @path /organizations/{organizationId}/invoices/{invoiceId}
-       * @allow (get, list, create, update, delete) Any organization member.
-       * @principle Multi-tenant data isolation.
-       */
       match /invoices/{invoiceId} {
-        allow get, list: if isMember(organizationId);
-        allow create: if isMember(organizationId) && request.resource.data.organizationId == organizationId;
-        allow update: if isExistingMember(organizationId) && request.resource.data.organizationId == resource.data.organizationId;
-        allow delete: if isExistingMember(organizationId);
-
-        /**
-         * @description Line items associated with a specific invoice.
-         * @path /organizations/{organizationId}/invoices/{invoiceId}/lineItems/{lineItemId}
-         * @allow (get, list, create, update, delete) Any organization member.
-         * @principle Authorization Independence via denormalized organizationId.
-         */
-        match /lineItems/{lineItemId} {
-          allow get, list: if isMember(organizationId);
-          allow create: if isMember(organizationId) && request.resource.data.invoiceId == invoiceId;
-          allow update: if isExistingMember(organizationId) && request.resource.data.invoiceId == resource.data.invoiceId;
-          allow delete: if isExistingMember(organizationId);
-        }
+        allow read: if isMember(organizationId);
+        allow create: if hasRole(organizationId, ['admin', 'manager', 'cashier']);
+        allow update: if hasRole(organizationId, ['admin', 'manager']);
+        allow delete: if hasRole(organizationId, ['admin']);
       }
 
-      /**
-       * @description Expenses incurred by the organization.
-       * @path /organizations/{organizationId}/expenses/{expenseId}
-       * @allow (get, list, create, update, delete) Any organization member.
-       * @principle Multi-tenant data isolation.
-       */
       match /expenses/{expenseId} {
-        allow get, list: if isMember(organizationId);
-        allow create: if isMember(organizationId) && request.resource.data.organizationId == organizationId;
-        allow update: if isExistingMember(organizationId) && request.resource.data.organizationId == resource.data.organizationId;
-        allow delete: if isExistingMember(organizationId);
+        allow read: if isMember(organizationId);
+        allow write: if hasRole(organizationId, ['admin', 'manager']);
+        allow delete: if hasRole(organizationId, ['admin']);
       }
     }
   }

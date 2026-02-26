@@ -2,13 +2,37 @@
 "use client";
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { LayoutDashboard } from 'lucide-react';
+import { useAuth, useUser, initiateGoogleSignIn, initiateEmailSignUp } from '@/firebase';
 
 export default function SignupPage() {
+  const auth = useAuth();
+  const { user } = useUser();
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  useEffect(() => {
+    if (user) {
+      router.push('/dashboard');
+    }
+  }, [user, router]);
+
+  const handleGoogleSignup = () => {
+    initiateGoogleSignIn(auth);
+  };
+
+  const handleEmailSignup = (e: React.FormEvent) => {
+    e.preventDefault();
+    initiateEmailSignUp(auth, email, password);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-8 animate-in fade-in zoom-in-95 duration-300">
@@ -30,7 +54,7 @@ export default function SignupPage() {
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid grid-cols-1 gap-6">
-              <Button variant="outline" className="w-full h-11">
+              <Button variant="outline" className="w-full h-11" onClick={handleGoogleSignup}>
                 <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                   <path
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -60,29 +84,19 @@ export default function SignupPage() {
                 <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleEmailSignup} className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="first-name">First Name</Label>
-                <Input id="first-name" placeholder="John" />
+                <Label htmlFor="email">Work Email</Label>
+                <Input id="email" type="email" placeholder="john@company.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="last-name">Last Name</Label>
-                <Input id="last-name" placeholder="Doe" />
+                <Label htmlFor="password">Password</Label>
+                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
               </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="email">Work Email</Label>
-              <Input id="email" type="email" placeholder="john@company.com" />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" />
-            </div>
+              <Button type="submit" className="w-full h-11">Create Account</Button>
+            </form>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button className="w-full h-11" asChild>
-                <Link href="/dashboard">Create Account</Link>
-            </Button>
             <p className="text-center text-sm text-muted-foreground">
               Already have an account?{" "}
               <Link href="/login" className="text-primary hover:underline font-medium">
@@ -91,9 +105,6 @@ export default function SignupPage() {
             </p>
           </CardFooter>
         </Card>
-        <p className="text-center text-xs text-muted-foreground px-8">
-            By clicking "Create Account", you agree to our Terms of Service and Privacy Policy.
-        </p>
       </div>
     </div>
   );
