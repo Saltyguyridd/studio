@@ -1,0 +1,650 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents an individual user account in the LedgerStream application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the user, used for communication and login (via external authentication system).",
+          "format": "email"
+        },
+        "firstName": {
+          "type": "string",
+          "description": "The first name of the user."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "The last name of the user."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the user account was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the user account was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "firstName",
+        "lastName",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Role": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Role",
+      "type": "object",
+      "description": "Defines a set of permissions or access levels within the application, typically assigned to users within an organization.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Role entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the role (e.g., 'Admin', 'Accountant', 'Viewer')."
+        },
+        "description": {
+          "type": "string",
+          "description": "A detailed description of the role and its associated privileges."
+        },
+        "permissions": {
+          "type": "array",
+          "description": "A list of permission strings associated with this role, controlling access to features and data.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "permissions"
+      ]
+    },
+    "Organization": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Organization",
+      "type": "object",
+      "description": "Represents a business or company using LedgerStream, serving as a tenant for financial data.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Organization entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The legal name of the organization."
+        },
+        "address": {
+          "type": "string",
+          "description": "The primary physical address of the organization."
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "The primary contact phone number for the organization."
+        },
+        "email": {
+          "type": "string",
+          "description": "The primary contact email address for the organization.",
+          "format": "email"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the organization record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the organization record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserOrganization": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserOrganization",
+      "type": "object",
+      "description": "Represents the many-to-many relationship between a User and an Organization, specifying a user's role within a particular organization.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the UserOrganization relationship entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User associated with this organization. (Relationship: User 1:N UserOrganization)"
+        },
+        "organizationId": {
+          "type": "string",
+          "description": "Reference to the Organization the user belongs to. (Relationship: Organization 1:N UserOrganization)"
+        },
+        "roleId": {
+          "type": "string",
+          "description": "Reference to the Role the user holds within this specific organization. (Relationship: Role 1:N UserOrganization)"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the user was added to this organization with the specified role.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the user's role or organization details were last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "organizationId",
+        "roleId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Contact": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Contact",
+      "type": "object",
+      "description": "Represents a customer or vendor entity with whom an organization does business.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Contact entity."
+        },
+        "organizationId": {
+          "type": "string",
+          "description": "Reference to the Organization that this contact belongs to. (Relationship: Organization 1:N Contact)"
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of contact (e.g., 'Customer', 'Vendor', 'Both')."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the contact (company name or individual's name)."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the contact.",
+          "format": "email"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "The phone number of the contact."
+        },
+        "address": {
+          "type": "string",
+          "description": "The mailing address of the contact."
+        },
+        "taxId": {
+          "type": "string",
+          "description": "The tax identification number for the contact (e.g., VAT number, EIN)."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the contact record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the contact record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "organizationId",
+        "type",
+        "name",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Account": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Account",
+      "type": "object",
+      "description": "Represents a general ledger account within an organization's chart of accounts (e.g., Cash, Sales Revenue, Rent Expense).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Account entity."
+        },
+        "organizationId": {
+          "type": "string",
+          "description": "Reference to the Organization this account belongs to. (Relationship: Organization 1:N Account)"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the account (e.g., 'Bank Account', 'Accounts Receivable', 'Utilities Expense')."
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of account (e.g., 'Asset', 'Liability', 'Equity', 'Revenue', 'Expense')."
+        },
+        "code": {
+          "type": "string",
+          "description": "A numeric or alphanumeric code for the account, often used in chart of accounts (e.g., '1010' for Cash)."
+        },
+        "description": {
+          "type": "string",
+          "description": "A detailed description of the account's purpose."
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Indicates if the account is currently active for transactions."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the account was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the account was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "organizationId",
+        "name",
+        "type",
+        "code",
+        "isActive",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Invoice": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Invoice",
+      "type": "object",
+      "description": "Represents a bill issued by an organization to a customer for goods or services.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Invoice entity."
+        },
+        "organizationId": {
+          "type": "string",
+          "description": "Reference to the Organization that issued this invoice. (Relationship: Organization 1:N Invoice)"
+        },
+        "invoiceNumber": {
+          "type": "string",
+          "description": "A unique, sequential number identifying the invoice within the organization."
+        },
+        "contactId": {
+          "type": "string",
+          "description": "Reference to the Contact (customer) to whom this invoice was issued. (Relationship: Contact 1:N Invoice)"
+        },
+        "issueDate": {
+          "type": "string",
+          "description": "The date the invoice was issued.",
+          "format": "date"
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "The date by which the invoice payment is due.",
+          "format": "date"
+        },
+        "totalAmount": {
+          "type": "number",
+          "description": "The total monetary amount of the invoice, including all line items."
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the invoice (e.g., 'Draft', 'Sent', 'Paid', 'Overdue', 'Void')."
+        },
+        "currency": {
+          "type": "string",
+          "description": "The currency in which the invoice is denominated (e.g., 'USD', 'EUR')."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the invoice record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the invoice record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "organizationId",
+        "invoiceNumber",
+        "contactId",
+        "issueDate",
+        "dueDate",
+        "totalAmount",
+        "status",
+        "currency",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "InvoiceLineItem": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "InvoiceLineItem",
+      "type": "object",
+      "description": "Represents a single item or service listed on an invoice.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the InvoiceLineItem entity."
+        },
+        "invoiceId": {
+          "type": "string",
+          "description": "Reference to the Invoice this line item belongs to. (Relationship: Invoice 1:N InvoiceLineItem)"
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the product or service on the line item."
+        },
+        "quantity": {
+          "type": "number",
+          "description": "The quantity of the item or service."
+        },
+        "unitPrice": {
+          "type": "number",
+          "description": "The price per unit of the item or service."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The total amount for this line item (quantity * unitPrice)."
+        },
+        "accountId": {
+          "type": "string",
+          "description": "Reference to the Account (e.g., 'Sales Revenue') associated with this line item for accounting purposes. (Relationship: Account 1:N InvoiceLineItem)"
+        }
+      },
+      "required": [
+        "id",
+        "invoiceId",
+        "description",
+        "quantity",
+        "unitPrice",
+        "amount",
+        "accountId"
+      ]
+    },
+    "Expense": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Expense",
+      "type": "object",
+      "description": "Represents a cost incurred by an organization in its operations.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Expense entity."
+        },
+        "organizationId": {
+          "type": "string",
+          "description": "Reference to the Organization that incurred this expense. (Relationship: Organization 1:N Expense)"
+        },
+        "vendorContactId": {
+          "type": "string",
+          "description": "Reference to the Contact (vendor/supplier) from whom this expense was incurred. (Relationship: Contact 1:N Expense)"
+        },
+        "date": {
+          "type": "string",
+          "description": "The date the expense was incurred or paid.",
+          "format": "date"
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the expense."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The total monetary amount of the expense."
+        },
+        "currency": {
+          "type": "string",
+          "description": "The currency in which the expense was incurred (e.g., 'USD', 'EUR')."
+        },
+        "accountId": {
+          "type": "string",
+          "description": "Reference to the Account (e.g., 'Rent Expense', 'Utilities Expense') associated with this expense for accounting purposes. (Relationship: Account 1:N Expense)"
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the expense (e.g., 'Pending', 'Approved', 'Reimbursed')."
+        },
+        "receiptUrl": {
+          "type": "string",
+          "description": "An optional URL pointing to a digital copy of the expense receipt.",
+          "format": "uri"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the expense record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the expense record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "organizationId",
+        "date",
+        "description",
+        "amount",
+        "currency",
+        "accountId",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores individual user profiles. Access is typically restricted to the user themselves (path matches `request.auth.uid`).",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user, corresponding to `request.auth.uid`."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/roles/{roleId}",
+        "definition": {
+          "entityName": "Role",
+          "schema": {
+            "$ref": "#/backend/entities/Role"
+          },
+          "description": "Contains definitions of application-wide roles and their permissions. These are read-only reference data for most users. Access to specific features based on these permissions is managed via the `UserOrganization` membership documents.",
+          "params": [
+            {
+              "name": "roleId",
+              "description": "The unique identifier for the role."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/organizations/{organizationId}",
+        "definition": {
+          "entityName": "Organization",
+          "schema": {
+            "$ref": "#/backend/entities/Organization"
+          },
+          "description": "Stores core details for each business organization. Access is restricted to users who are members of this organization.",
+          "params": [
+            {
+              "name": "organizationId",
+              "description": "The unique identifier for the organization."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/organizations/{organizationId}/members/{userId}",
+        "definition": {
+          "entityName": "UserOrganization",
+          "schema": {
+            "$ref": "#/backend/entities/UserOrganization"
+          },
+          "description": "Defines the membership of a user within a specific organization and their assigned `roleId`. This document implicitly holds the `organizationId` and `userId` from the path. This structure provides Authorization Independence for all organization-scoped data by allowing a simple `exists()` check against this path for `request.auth.uid`.",
+          "params": [
+            {
+              "name": "organizationId",
+              "description": "The unique identifier of the organization."
+            },
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user (member) within this organization."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/organizations/{organizationId}/contacts/{contactId}",
+        "definition": {
+          "entityName": "Contact",
+          "schema": {
+            "$ref": "#/backend/entities/Contact"
+          },
+          "description": "Stores customer and vendor contacts for a specific organization. Includes denormalized 'organizationId' for authorization independence and query efficiency.",
+          "params": [
+            {
+              "name": "organizationId",
+              "description": "The unique identifier of the parent organization."
+            },
+            {
+              "name": "contactId",
+              "description": "The unique identifier for the contact."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/organizations/{organizationId}/accounts/{accountId}",
+        "definition": {
+          "entityName": "Account",
+          "schema": {
+            "$ref": "#/backend/entities/Account"
+          },
+          "description": "Stores chart of accounts for a specific organization. Includes denormalized 'organizationId' for authorization independence and query efficiency.",
+          "params": [
+            {
+              "name": "organizationId",
+              "description": "The unique identifier of the parent organization."
+            },
+            {
+              "name": "accountId",
+              "description": "The unique identifier for the account."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/organizations/{organizationId}/invoices/{invoiceId}",
+        "definition": {
+          "entityName": "Invoice",
+          "schema": {
+            "$ref": "#/backend/entities/Invoice"
+          },
+          "description": "Stores invoices issued by an organization. Includes denormalized 'organizationId' for authorization independence and query efficiency.",
+          "params": [
+            {
+              "name": "organizationId",
+              "description": "The unique identifier of the parent organization."
+            },
+            {
+              "name": "invoiceId",
+              "description": "The unique identifier for the invoice."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/organizations/{organizationId}/invoices/{invoiceId}/lineItems/{lineItemId}",
+        "definition": {
+          "entityName": "InvoiceLineItem",
+          "schema": {
+            "$ref": "#/backend/entities/InvoiceLineItem"
+          },
+          "description": "Stores individual line items for an invoice. Explicitly includes denormalized 'organizationId' (in addition to 'invoiceId') to ensure authorization independence from its parent invoice document, allowing direct access checks based on organization membership.",
+          "params": [
+            {
+              "name": "organizationId",
+              "description": "The unique identifier of the grand-parent organization, denormalized for authorization independence."
+            },
+            {
+              "name": "invoiceId",
+              "description": "The unique identifier of the parent invoice."
+            },
+            {
+              "name": "lineItemId",
+              "description": "The unique identifier for the invoice line item."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/organizations/{organizationId}/expenses/{expenseId}",
+        "definition": {
+          "entityName": "Expense",
+          "schema": {
+            "$ref": "#/backend/entities/Expense"
+          },
+          "description": "Stores expenses incurred by an organization. Includes denormalized 'organizationId' for authorization independence and query efficiency.",
+          "params": [
+            {
+              "name": "organizationId",
+              "description": "The unique identifier of the parent organization."
+            },
+            {
+              "name": "expenseId",
+              "description": "The unique identifier for the expense."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure for LedgerStream is designed with a strong emphasis on Authorization Independence, Structural Segregation, and clear Access Modeling, which are critical for security, scalability, and debuggability. All documents implicitly or explicitly contain the `organizationId` to enable robust, single-query security rules for multi-tenant data. \n\n**Authorization Independence (CRITICAL):**\n1.  **User-specific data:** The `/users/{userId}` collection directly leverages Firebase Authentication's `request.auth.uid` for ownership, making user profile access atomic and independent. \n2.  **Organization-specific data:** For all data within an organization (e.g., Contacts, Accounts, Invoices, Expenses), the `organizationId` is either part of the collection path (e.g., `/organizations/{organizationId}/...`) or explicitly denormalized into the document (e.g., `InvoiceLineItem` includes `organizationId`). Access to any organization-scoped document will rely on the `organizations/{organizationId}/members/{userId}` subcollection. Security rules will check for the existence of `request.auth.uid` within this `members` subcollection for the relevant `organizationId`. This eliminates the need for expensive `get()` calls on parent documents to determine authorization, allowing for atomic operations and simplifying rule logic. For example, a rule could be `allow read: if exists(/databases/$(database)/documents/organizations/$(resource.data.organizationId)/members/$(request.auth.uid));`. \n\n**QAPs (Rules are not Filters):**\n1.  **Path-Based Ownership:** The `/users/{userId}` structure directly supports `get()` and `list()` for a user's own data (`/users/$(request.auth.uid)`). \n2.  **Structural Segregation:** Data is segregated by organization. All data under `/organizations/{organizationId}` inherently belongs to that organization. This allows for efficient `list()` queries (e.g., `db.collection('organizations').doc(orgId).collection('invoices').where('status', '==', 'Paid')`). The `organizationId` field within documents allows for queries scoped to a specific organization. \n3.  **Membership Model:** The `/organizations/{organizationId}/members/{userId}` subcollection serves as the definitive roster. Users can list organizations they belong to by querying this subcollection (e.g., `db.collectionGroup('members').where('userId', '==', request.auth.uid)`). Conversely, an organization's administrator can list all members by querying `db.collection('organizations').doc(orgId).collection('members')`. This provides efficient `list()` operations without security rule filters.\n\n**Structural Segregation & Access Modeling:**\n*   **Private Data:** User profiles (`/users/{userId}`).\n*   **Reference Data:** Global roles (`/roles/{roleId}`).\n*   **Multi-tenant & Collaborative Data:** All core business entities (Organizations, Contacts, Accounts, Invoices, Expenses) are housed under the `/organizations/{organizationId}` path. Membership and roles within an organization are explicitly defined in `/organizations/{organizationId}/members/{userId}`, making access control explicit and granular. The `roleId` stored in the member document can be used to `get()` the global role document for permission checks, which is an acceptable use of `get()` as `Role` data is static reference data, not authorization context for other data.\n\n**Data Clarity and Predictability:**\n*   Consistent naming conventions are used (`userId`, `organizationId`, `roleId`, `{userId}`, `{organizationId}`).\n*   The `status` field is used for explicit state modeling (e.g., Invoice `status`).\n*   No dynamic keys are introduced."
+  }
+}
