@@ -20,6 +20,10 @@
         "lastName": {
           "type": "string"
         },
+        "organizationId": {
+          "type": "string",
+          "description": "The ID of the organization the user belongs to."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time"
@@ -82,8 +86,7 @@
           ]
         },
         "email": {
-          "type": "string",
-          "description": "Redundant email for easier list queries."
+          "type": "string"
         }
       },
       "required": [
@@ -92,6 +95,31 @@
         "organizationId",
         "role"
       ]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Paid", "Pending", "Unpaid"] },
+        "method": { "type": "string" },
+        "customerName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["amount", "status"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["amount", "description"]
     }
   },
   "auth": {
@@ -101,37 +129,35 @@
     ]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/users/{userId}",
-        "definition": {
-          "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "User profile data."
-        }
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/backend/entities/User"
       },
-      {
-        "path": "/organizations/{organizationId}",
-        "definition": {
-          "entityName": "Organization",
-          "schema": {
-            "$ref": "#/backend/entities/Organization"
-          },
-          "description": "Organization details."
-        }
+      "description": "User profile data."
+    },
+    "/organizations/{organizationId}": {
+      "schema": {
+        "$ref": "#/backend/entities/Organization"
       },
-      {
-        "path": "/organizations/{organizationId}/members/{userId}",
-        "definition": {
-          "entityName": "UserOrganization",
-          "schema": {
-            "$ref": "#/backend/entities/UserOrganization"
-          },
-          "description": "Membership and role within an organization."
-        }
-      }
-    ]
+      "description": "Organization details."
+    },
+    "/organizations/{organizationId}/members/{userId}": {
+      "schema": {
+        "$ref": "#/backend/entities/UserOrganization"
+      },
+      "description": "Membership and role within an organization."
+    },
+    "/organizations/{organizationId}/invoices/{invoiceId}": {
+      "schema": {
+        "$ref": "#/backend/entities/Invoice"
+      },
+      "description": "Financial invoices."
+    },
+    "/organizations/{organizationId}/expenses/{expenseId}": {
+      "schema": {
+        "$ref": "#/backend/entities/Expense"
+      },
+      "description": "Business expenses."
+    }
   }
 }

@@ -13,7 +13,8 @@ import {
   Search,
   ArrowUpRight,
   ArrowDownRight,
-  Plus
+  Plus,
+  Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,8 +29,57 @@ import {
     TableRow 
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, orderBy, limit, doc } from 'firebase/firestore';
 
 export default function DashboardPage() {
+  const { user, isUserLoading } = useUser();
+  const db = useFirestore();
+
+  // Fetch the user's profile to get their organizationId
+  const userProfileRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return doc(db, 'users', user.uid);
+  }, [db, user]);
+  
+  const { data: profile } = useDoc(userProfileRef);
+  const orgId = profile?.organizationId;
+
+  // Fetch invoices for the organization
+  const invoicesQuery = useMemoFirebase(() => {
+    if (!orgId) return null;
+    return query(collection(db, 'organizations', orgId, 'invoices'), orderBy('createdAt', 'desc'), limit(10));
+  }, [db, orgId]);
+
+  const { data: invoices, isLoading: isInvoicesLoading } = useCollection(invoicesQuery);
+
+  // Fetch expenses for the organization
+  const expensesQuery = useMemoFirebase(() => {
+    if (!orgId) return null;
+    return query(collection(db, 'organizations', orgId, 'expenses'), orderBy('createdAt', 'desc'), limit(10));
+  }, [db, orgId]);
+
+  const { data: expenses, isLoading: isExpensesLoading } = useCollection(expensesQuery);
+
+  // Calculate Summary Statistics
+  const revenue = invoices?.filter(i => i.status === 'Paid').reduce((sum, i) => sum + (Number(i.amount) || 0), 0) || 0;
+  const activeInvoicesCount = invoices?.filter(i => i.status !== 'Paid').length || 0;
+  const totalExpenses = expenses?.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) || 0;
+  const netProfit = revenue - totalExpenses;
+
+  // Formatting helper
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  };
+
+  if (isUserLoading || !user) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-accent/20 overflow-hidden">
       {/* Sidebar - Desktop */}
@@ -74,11 +124,10 @@ export default function DashboardPage() {
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" className="relative">
               <Bell className="h-5 w-5" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-destructive rounded-full border-2 border-background"></span>
             </Button>
             <Avatar className="h-8 w-8 cursor-pointer ring-2 ring-transparent hover:ring-primary transition-all">
-              <AvatarImage src="https://picsum.photos/seed/user1/100/100" />
-              <AvatarFallback>JD</AvatarFallback>
+              <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`} />
+              <AvatarFallback>{user.email?.charAt(0).toUpperCase()}</AvatarFallback>
             </Avatar>
           </div>
         </header>
@@ -88,7 +137,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
                 <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
-                <p className="text-sm text-muted-foreground">Here&apos;s what&apos;s happening with your finances today.</p>
+                <p className="text-sm text-muted-foreground">Real-time financial performance for {profile?.firstName || 'your business'}.</p>
             </div>
             <Button className="gap-2">
                 <Plus className="h-4 w-4" /> New Invoice
@@ -99,46 +148,50 @@ export default function DashboardPage() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <SummaryCard 
                 title="Total Revenue" 
-                value="$45,231.89" 
-                change="+20.1% from last month" 
+                value={formatCurrency(revenue)} 
+                change="Lifetime paid" 
                 trend="up" 
                 icon={DollarSign}
+                isLoading={isInvoicesLoading}
             />
             <SummaryCard 
                 title="Active Invoices" 
-                value="24" 
-                change="+12 since last week" 
+                value={activeInvoicesCount.toString()} 
+                change="Awaiting payment" 
                 trend="up" 
                 icon={FileText}
+                isLoading={isInvoicesLoading}
             />
             <SummaryCard 
                 title="Expenses" 
-                value="$12,403.00" 
-                change="-4% from last month" 
+                value={formatCurrency(totalExpenses)} 
+                change="All tracked costs" 
                 trend="down" 
                 icon={CreditCard}
+                isLoading={isExpensesLoading}
             />
             <SummaryCard 
                 title="Net Profit" 
-                value="$32,828.89" 
-                change="+10.1% from last month" 
+                value={formatCurrency(netProfit)} 
+                change="Revenue - Expenses" 
                 trend="up" 
                 icon={TrendingUp}
+                isLoading={isInvoicesLoading || isExpensesLoading}
             />
           </div>
 
           <div className="grid lg:grid-cols-7 gap-6">
-            {/* Cash Flow Chart Mockup */}
+            {/* Cash Flow Chart Mockup (Static bars but real labels) */}
             <Card className="lg:col-span-4 border-none shadow-sm">
                 <CardHeader>
-                    <CardTitle>Cash Flow</CardTitle>
-                    <CardDescription>Monthly revenue vs expenses</CardDescription>
+                    <CardTitle>Cash Flow Trend</CardTitle>
+                    <CardDescription>Monthly visualization of financial health</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="h-[300px] w-full bg-accent/20 rounded-lg flex items-end justify-between px-6 pb-2 gap-2">
                         {[40, 65, 45, 80, 55, 90, 75, 85, 60, 95, 80, 100].map((h, i) => (
                             <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                                <div className="w-full bg-primary rounded-t-sm" style={{ height: `${h}%` }}></div>
+                                <div className="w-full bg-primary/40 rounded-t-sm" style={{ height: `${h}%` }}></div>
                                 <span className="text-[10px] text-muted-foreground uppercase">{['J','F','M','A','M','J','J','A','S','O','N','D'][i]}</span>
                             </div>
                         ))}
@@ -146,43 +199,39 @@ export default function DashboardPage() {
                 </CardContent>
             </Card>
 
-            {/* Recent Transactions */}
+            {/* Recent Activity */}
             <Card className="lg:col-span-3 border-none shadow-sm">
                 <CardHeader>
                     <CardTitle>Recent Activity</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-6">
-                        <ActivityItem 
-                            name="Acme Corp" 
-                            desc="Paid Invoice #INV-001" 
-                            amount="+$1,200.00" 
-                            time="2h ago"
-                        />
-                        <ActivityItem 
-                            name="Amazon Web Services" 
-                            desc="Monthly subscription" 
-                            amount="-$240.00" 
-                            time="5h ago"
-                            isExpense
-                        />
-                        <ActivityItem 
-                            name="Sarah Johnson" 
-                            desc="Sent Invoice #INV-002" 
-                            amount="$450.00" 
-                            time="1d ago"
-                        />
-                        <ActivityItem 
-                            name="Office Supplies Inc" 
-                            desc="Hardware purchase" 
-                            amount="-$1,100.00" 
-                            time="2d ago"
-                            isExpense
-                        />
+                        {invoices?.length === 0 && expenses?.length === 0 ? (
+                          <p className="text-sm text-muted-foreground text-center py-8">No recent activity found.</p>
+                        ) : (
+                          <>
+                            {invoices?.slice(0, 3).map((inv) => (
+                              <ActivityItem 
+                                  key={inv.id}
+                                  name={inv.customerName || 'Unknown Customer'} 
+                                  desc={`Invoice ${inv.status}`} 
+                                  amount={`${inv.status === 'Paid' ? '+' : ''}${formatCurrency(inv.amount)}`} 
+                                  time={inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : 'Just now'}
+                              />
+                            ))}
+                            {expenses?.slice(0, 2).map((exp) => (
+                              <ActivityItem 
+                                  key={exp.id}
+                                  name={exp.description} 
+                                  desc={exp.category} 
+                                  amount={`-${formatCurrency(exp.amount)}`} 
+                                  time={exp.createdAt ? new Date(exp.createdAt).toLocaleDateString() : 'Just now'}
+                                  isExpense
+                              />
+                            ))}
+                          </>
+                        )}
                     </div>
-                    <Button variant="link" className="w-full mt-6 text-primary h-auto p-0">
-                        View All Activity
-                    </Button>
                 </CardContent>
             </Card>
           </div>
@@ -199,31 +248,33 @@ export default function DashboardPage() {
             <Table>
                 <TableHeader>
                     <TableRow className="bg-accent/10">
-                        <TableHead>Invoice</TableHead>
+                        <TableHead>Customer</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Method</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {[
-                        { id: "INV001", status: "Paid", method: "Credit Card", amount: "$250.00" },
-                        { id: "INV002", status: "Pending", method: "PayPal", amount: "$150.00" },
-                        { id: "INV003", status: "Unpaid", method: "Bank Transfer", amount: "$350.00" },
-                        { id: "INV004", status: "Paid", method: "Credit Card", amount: "$450.00" },
-                        { id: "INV005", status: "Paid", method: "Bank Transfer", amount: "$550.00" },
-                    ].map((invoice) => (
+                    {invoices && invoices.length > 0 ? (
+                      invoices.map((invoice) => (
                         <TableRow key={invoice.id}>
-                            <TableCell className="font-medium">{invoice.id}</TableCell>
+                            <TableCell className="font-medium">{invoice.customerName || 'Guest'}</TableCell>
                             <TableCell>
                                 <Badge variant={invoice.status === "Paid" ? "secondary" : "outline"} className={invoice.status === "Unpaid" ? "text-destructive border-destructive" : ""}>
                                     {invoice.status}
                                 </Badge>
                             </TableCell>
-                            <TableCell>{invoice.method}</TableCell>
-                            <TableCell className="text-right font-medium">{invoice.amount}</TableCell>
+                            <TableCell>{invoice.method || 'N/A'}</TableCell>
+                            <TableCell className="text-right font-medium">{formatCurrency(invoice.amount)}</TableCell>
                         </TableRow>
-                    ))}
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                          {isInvoicesLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'No invoices found.'}
+                        </TableCell>
+                      </TableRow>
+                    )}
                 </TableBody>
             </Table>
           </Card>
@@ -242,7 +293,7 @@ function NavItem({ icon: Icon, label, active = false }: { icon: any, label: stri
     );
 }
 
-function SummaryCard({ title, value, change, trend, icon: Icon }: { title: string, value: string, change: string, trend: 'up' | 'down', icon: any }) {
+function SummaryCard({ title, value, change, trend, icon: Icon, isLoading }: { title: string, value: string, change: string, trend: 'up' | 'down', icon: any, isLoading?: boolean }) {
     return (
         <Card className="border-none shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -250,11 +301,17 @@ function SummaryCard({ title, value, change, trend, icon: Icon }: { title: strin
                 <Icon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-                <div className="text-2xl font-bold">{value}</div>
-                <div className={`text-xs mt-1 flex items-center gap-1 ${trend === 'up' ? 'text-secondary font-semibold' : 'text-muted-foreground'}`}>
-                    {trend === 'up' ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                    {change}
-                </div>
+                {isLoading ? (
+                  <div className="h-8 w-24 bg-accent animate-pulse rounded"></div>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">{value}</div>
+                    <div className={`text-xs mt-1 flex items-center gap-1 ${trend === 'up' ? 'text-secondary font-semibold' : 'text-muted-foreground'}`}>
+                        {trend === 'up' ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                        {change}
+                    </div>
+                  </>
+                )}
             </CardContent>
         </Card>
     );
@@ -268,7 +325,7 @@ function ActivityItem({ name, desc, amount, time, isExpense = false }: { name: s
                     {isExpense ? <CreditCard className="h-4 w-4 text-primary" /> : <ArrowDownRight className="h-4 w-4 text-secondary" />}
                 </div>
                 <div>
-                    <p className="text-sm font-bold leading-none">{name}</p>
+                    <p className="text-sm font-bold leading-none truncate max-w-[120px]">{name}</p>
                     <p className="text-xs text-muted-foreground mt-1">{desc}</p>
                 </div>
             </div>
