@@ -1,6 +1,8 @@
 
 "use client";
 
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   BarChart, 
   CreditCard, 
@@ -29,12 +31,14 @@ import {
     TableRow 
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
+import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { collection, query, orderBy, limit, doc } from 'firebase/firestore';
 
 export default function DashboardPage() {
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
+  const router = useRouter();
+  const [isInitializing, setIsInitializing] = useState(false);
 
   // Fetch the user's profile to get their organizationId
   const userProfileRef = useMemoFirebase(() => {
@@ -42,7 +46,53 @@ export default function DashboardPage() {
     return doc(db, 'users', user.uid);
   }, [db, user]);
   
-  const { data: profile } = useDoc(userProfileRef);
+  const { data: profile, isLoading: isProfileLoading } = useDoc(userProfileRef);
+
+  // Profile/Org Initialization logic for new users
+  useEffect(() => {
+    if (!isUserLoading && user && !isProfileLoading && !profile && !isInitializing) {
+      setIsInitializing(true);
+      
+      const orgId = `org_${user.uid}`;
+      const orgRef = doc(db, 'organizations', orgId);
+      const userRef = doc(db, 'users', user.uid);
+      const memberRef = doc(db, 'organizations', orgId, 'members', user.uid);
+
+      // Create Org
+      setDocumentNonBlocking(orgRef, {
+        id: orgId,
+        name: `${user.email?.split('@')[0]}'s Organization`,
+        ownerId: user.uid,
+        createdAt: new Date().toISOString()
+      }, { merge: true });
+
+      // Create User Profile
+      setDocumentNonBlocking(userRef, {
+        id: user.uid,
+        email: user.email,
+        firstName: user.displayName?.split(' ')[0] || 'New',
+        lastName: user.displayName?.split(' ')[1] || 'User',
+        organizationId: orgId,
+        createdAt: new Date().toISOString()
+      }, { merge: true });
+
+      // Create Membership as Admin
+      setDocumentNonBlocking(memberRef, {
+        id: user.uid,
+        userId: user.uid,
+        organizationId: orgId,
+        role: 'admin',
+        email: user.email
+      }, { merge: true });
+    }
+  }, [isUserLoading, user, isProfileLoading, profile, isInitializing, db]);
+
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isUserLoading, router]);
+
   const orgId = profile?.organizationId;
 
   // Fetch invoices for the organization
@@ -72,7 +122,7 @@ export default function DashboardPage() {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
 
-  if (isUserLoading || !user) {
+  if (isUserLoading || !user || (!profile && !isInitializing)) {
     return (
       <div className="h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -134,6 +184,13 @@ export default function DashboardPage() {
 
         {/* Scrollable Area */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {isInitializing && !profile && (
+            <div className="bg-primary/10 border border-primary/20 p-4 rounded-lg flex items-center gap-3 animate-pulse">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <p className="text-sm font-medium text-primary">Setting up your secure organization workspace...</p>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <div className="space-y-1">
                 <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
@@ -152,7 +209,7 @@ export default function DashboardPage() {
                 change="Lifetime paid" 
                 trend="up" 
                 icon={DollarSign}
-                isLoading={isInvoicesLoading}
+                isLoading={isInvoicesLoading || isProfileLoading}
             />
             <SummaryCard 
                 title="Active Invoices" 
@@ -160,7 +217,7 @@ export default function DashboardPage() {
                 change="Awaiting payment" 
                 trend="up" 
                 icon={FileText}
-                isLoading={isInvoicesLoading}
+                isLoading={isInvoicesLoading || isProfileLoading}
             />
             <SummaryCard 
                 title="Expenses" 
@@ -168,7 +225,7 @@ export default function DashboardPage() {
                 change="All tracked costs" 
                 trend="down" 
                 icon={CreditCard}
-                isLoading={isExpensesLoading}
+                isLoading={isExpensesLoading || isProfileLoading}
             />
             <SummaryCard 
                 title="Net Profit" 
@@ -176,12 +233,11 @@ export default function DashboardPage() {
                 change="Revenue - Expenses" 
                 trend="up" 
                 icon={TrendingUp}
-                isLoading={isInvoicesLoading || isExpensesLoading}
+                isLoading={isInvoicesLoading || isExpensesLoading || isProfileLoading}
             />
           </div>
 
           <div className="grid lg:grid-cols-7 gap-6">
-            {/* Cash Flow Chart Mockup (Static bars but real labels) */}
             <Card className="lg:col-span-4 border-none shadow-sm">
                 <CardHeader>
                     <CardTitle>Cash Flow Trend</CardTitle>
@@ -199,14 +255,13 @@ export default function DashboardPage() {
                 </CardContent>
             </Card>
 
-            {/* Recent Activity */}
             <Card className="lg:col-span-3 border-none shadow-sm">
                 <CardHeader>
                     <CardTitle>Recent Activity</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-6">
-                        {invoices?.length === 0 && expenses?.length === 0 ? (
+                        {(!invoices?.length && !expenses?.length) ? (
                           <p className="text-sm text-muted-foreground text-center py-8">No recent activity found.</p>
                         ) : (
                           <>
@@ -236,7 +291,6 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {/* Recent Invoices Table */}
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between">
                 <div>
