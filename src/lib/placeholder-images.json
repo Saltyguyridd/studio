@@ -1,3 +1,28 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "hero-dashboard",
+      "description": "LedgerStream Dashboard Preview",
+      "imageUrl": "https://images.unsplash.com/photo-1668930185267-1f3c19851b5b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxhY2NvdW50aW5nJTIwZGFzaGJvYXJkfGVufDB8fHx8MTc3MjEyMTMyOHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "accounting dashboard"
+    },
+    {
+      "id": "feature-reporting",
+      "description": "Advanced Financial Reporting",
+      "imageUrl": "https://images.unsplash.com/photo-1761587941453-bd1790225d52?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxmaW5hbmNpYWwlMjBjaGFydHN8ZW58MHx8fHwxNzcyMTIxMzI4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "financial charts"
+    },
+    {
+      "id": "feature-invoicing",
+      "description": "Professional Invoicing System",
+      "imageUrl": "https://images.unsplash.com/photo-1764231467852-b609a742e082?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxpbnZvaWNlJTIwZG9jdW1lbnR8ZW58MHx8fHwxNzcyMTIxMzI4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "invoice document"
+    },
+    {
+      "id": "avatar-user-1",
+      "description": "Satisfied Business Owner",
+      "imageUrl": "https://images.unsplash.com/photo-1537511446984-935f663eb1f4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxidXNpbmVzcyUyMHByb2Zlc3Npb25hbHxlbnwwfHx8fDE3NzIwMDQ4ODh8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "business professional"
+    }
+  ]
 }
