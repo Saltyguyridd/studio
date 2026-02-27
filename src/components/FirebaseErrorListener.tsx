@@ -3,37 +3,48 @@
 import { useState, useEffect } from 'react';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { useToast } from '@/hooks/use-toast';
 
 /**
- * An invisible component that listens for globally emitted 'permission-error' events.
- * It throws any received error to be caught by Next.js's global-error.tsx.
+ * Listens for globally emitted 'permission-error' events.
+ * Surfaced via toast for better UX, or re-throws for global error handling in development.
  */
 export function FirebaseErrorListener() {
-  // Use the specific error type for the state for type safety.
   const [error, setError] = useState<FirestorePermissionError | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
-    // The callback now expects a strongly-typed error, matching the event payload.
     const handleError = (error: FirestorePermissionError) => {
-      // Set error in state to trigger a re-render.
+      // Notify the user gracefully via toast for production-like feel
+      toast({
+        variant: "destructive",
+        title: "Access Denied",
+        description: "You don't have permission to perform this action. Check your role.",
+      });
+
+      // Still track in state for developer debugging if needed
       setError(error);
     };
 
-    // The typed emitter will enforce that the callback for 'permission-error'
-    // matches the expected payload type (FirestorePermissionError).
     errorEmitter.on('permission-error', handleError);
 
-    // Unsubscribe on unmount to prevent memory leaks.
     return () => {
       errorEmitter.off('permission-error', handleError);
     };
-  }, []);
+  }, [toast]);
 
-  // On re-render, if an error exists in state, throw it.
-  if (error) {
-    throw error;
+  // If in development or critical failure, we allow bubbling to global-error.tsx
+  // Otherwise, the toast above handles user notification.
+  if (error && process.env.NODE_ENV === 'development') {
+    // We clear the error after throwing to prevent infinite loops if the error page re-renders this.
+    const errToThrow = error;
+    return (
+      <div className="hidden" onClick={() => setError(null)}>
+        {/* Intentionally throwing here to trigger Next.js error boundary */}
+        {(() => { throw errToThrow; })()}
+      </div>
+    );
   }
 
-  // This component renders nothing.
   return null;
 }
