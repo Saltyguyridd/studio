@@ -26,7 +26,8 @@ service cloud.firestore {
 
     // --- Users ---
     match /users/{userId} {
-      allow get, list: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn(); // Allow listing for staff selection/lookup
       allow create, update: if isUser(userId);
     }
 
@@ -36,25 +37,27 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow update: if hasRole(organizationId, ['admin']);
 
+      // Staff Management (Admin only)
       match /members/{userId} {
         allow read: if isMember(organizationId);
-        allow create, update, delete: if hasRole(organizationId, ['admin']);
+        allow write: if hasRole(organizationId, ['admin']);
       }
 
-      match /contacts/{contactId} {
-        allow read: if isMember(organizationId);
-        allow write: if hasRole(organizationId, ['admin', 'manager', 'cashier']);
-      }
-
+      // Invoices
       match /invoices/{invoiceId} {
         allow read: if isMember(organizationId);
+        // Create: Admin, Manager, Cashier
         allow create: if hasRole(organizationId, ['admin', 'manager', 'cashier']);
+        // Update (Edit/Record Payment): Admin, Manager
         allow update: if hasRole(organizationId, ['admin', 'manager']);
+        // Delete: Admin only
         allow delete: if hasRole(organizationId, ['admin']);
       }
 
+      // Expenses
       match /expenses/{expenseId} {
         allow read: if isMember(organizationId);
+        // Admin and Manager can manage expenses
         allow write: if hasRole(organizationId, ['admin', 'manager']);
         allow delete: if hasRole(organizationId, ['admin']);
       }
