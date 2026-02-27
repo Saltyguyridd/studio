@@ -66,21 +66,34 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       return;
     }
 
-    // Handle redirect results for Google Login
-    getRedirectResult(auth)
-      .then((result) => {
+    // Capture the result of a redirect sign-in
+    const checkRedirect = async () => {
+      try {
+        const result = await getRedirectResult(auth);
         if (result?.user) {
           console.log("Redirect login successful:", result.user.email);
         }
-      })
-      .catch((error) => {
+      } catch (error: any) {
         console.error("Redirect login error:", error);
-        toast({
-          variant: "destructive",
-          title: "Authentication Error",
-          description: error.message || "Failed to complete sign-in.",
-        });
-      });
+        // Special handling for 403 or blocked access
+        if (error.code === 'auth/account-exists-with-different-credential') {
+          toast({
+            variant: "destructive",
+            title: "Account Conflict",
+            description: "An account already exists with the same email address but different sign-in credentials.",
+          });
+        } else if (error.code === 'auth/internal-error') {
+           // This often happens if the domain isn't authorized or Google blocks the request
+           toast({
+            variant: "destructive",
+            title: "Authentication Failed",
+            description: "Google services rejected the request. Please check if your email is added as a test user in Google Cloud Console.",
+          });
+        }
+      }
+    };
+
+    checkRedirect();
 
     const unsubscribe = onAuthStateChanged(
       auth,
@@ -88,7 +101,6 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
         setUserAuthState({ user: firebaseUser, isUserLoading: false, userError: null });
       },
       (error) => {
-        console.error("FirebaseProvider: onAuthStateChanged error:", error);
         setUserAuthState({ user: null, isUserLoading: false, userError: error });
       }
     );
