@@ -119,6 +119,9 @@ export default function DashboardPage() {
         role: 'admin',
         email: user.email
       }, { merge: true });
+      
+      // Give a small buffer for rules to propagate
+      setTimeout(() => setIsInitializing(false), 500);
     }
   }, [isUserLoading, user, isProfileLoading, profile, isInitializing, db]);
 
@@ -128,18 +131,18 @@ export default function DashboardPage() {
     }
   }, [user, isUserLoading, router]);
 
-  // Data fetching - IMPORTANT: Wait for membership to avoid security rules rejection
+  // Data fetching - IMPORTANT: Wait for membership and initialization to avoid security rules rejection
   const invoicesQuery = useMemoFirebase(() => {
-    if (!orgId || isMembershipLoading || !membership) return null;
+    if (!orgId || isMembershipLoading || !membership || isInitializing) return null;
     return query(collection(db, 'organizations', orgId, 'invoices'), orderBy('createdAt', 'desc'), limit(10));
-  }, [db, orgId, isMembershipLoading, membership]);
+  }, [db, orgId, isMembershipLoading, membership, isInitializing]);
 
   const { data: invoices, isLoading: isInvoicesLoading } = useCollection(invoicesQuery);
 
   const expensesQuery = useMemoFirebase(() => {
-    if (!orgId || isMembershipLoading || !membership) return null;
+    if (!orgId || isMembershipLoading || !membership || isInitializing) return null;
     return query(collection(db, 'organizations', orgId, 'expenses'), orderBy('createdAt', 'desc'), limit(10));
-  }, [db, orgId, isMembershipLoading, membership]);
+  }, [db, orgId, isMembershipLoading, membership, isInitializing]);
 
   const { data: expenses, isLoading: isExpensesLoading } = useCollection(expensesQuery);
 
@@ -189,7 +192,7 @@ export default function DashboardPage() {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
 
-  if (isUserLoading || !user || (!profile && !isInitializing)) {
+  if (isUserLoading || !user || (isProfileLoading && !profile) || isInitializing) {
     return (
       <div className="h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -199,7 +202,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex h-screen bg-accent/20 overflow-hidden">
-      {/* Sidebar */}
+      {/* Sidebar omitted for brevity but remains the same */}
       <aside className="w-64 border-r bg-background hidden md:flex flex-col">
         <div className="h-16 flex items-center px-6 border-b">
           <div className="flex items-center gap-2">

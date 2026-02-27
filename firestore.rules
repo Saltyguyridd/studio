@@ -12,22 +12,33 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function getOrg(orgId) {
+      return get(/databases/$(database)/documents/organizations/$(orgId)).data;
+    }
+
+    function isOwner(orgId) {
+      return isSignedIn() && exists(/databases/$(database)/documents/organizations/$(orgId)) && getOrg(orgId).ownerId == request.auth.uid;
+    }
+
     function getMember(orgId) {
       return get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data;
     }
 
     function isMember(orgId) {
-      return isSignedIn() && exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid));
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)) ||
+        isOwner(orgId)
+      );
     }
 
     function hasRole(orgId, roles) {
-      return isMember(orgId) && getMember(orgId).role in roles;
+      return isMember(orgId) && (isOwner(orgId) || getMember(orgId).role in roles);
     }
 
     // --- Users ---
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if isSignedIn(); // Allow listing for staff selection/lookup
+      allow list: if isSignedIn();
       allow create, update: if isUser(userId);
     }
 
@@ -39,27 +50,21 @@ service cloud.firestore {
 
       // Staff Management
       match /members/{userId} {
-        // Users can always read their own membership status to facilitate login/onboarding
         allow read: if isMember(organizationId) || isUser(userId);
-        // Only admins can write/manage other members
         allow write: if hasRole(organizationId, ['admin']);
       }
 
       // Invoices
       match /invoices/{invoiceId} {
         allow read: if isMember(organizationId);
-        // Create: Admin, Manager, Cashier
         allow create: if hasRole(organizationId, ['admin', 'manager', 'cashier']);
-        // Update (Edit/Record Payment): Admin, Manager
         allow update: if hasRole(organizationId, ['admin', 'manager']);
-        // Delete: Admin only
         allow delete: if hasRole(organizationId, ['admin']);
       }
 
       // Expenses
       match /expenses/{expenseId} {
         allow read: if isMember(organizationId);
-        // Admin and Manager can manage expenses
         allow write: if hasRole(organizationId, ['admin', 'manager']);
         allow delete: if hasRole(organizationId, ['admin']);
       }
