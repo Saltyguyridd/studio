@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -19,31 +18,51 @@ import {
   Plus,
   Loader2,
   Settings,
-  ShieldCheck
+  ShieldCheck,
+  LogOut,
+  X
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
-import { 
-    Table, 
-    TableBody, 
-    TableCell, 
-    TableHead, 
-    TableHeader, 
-    TableRow 
-} from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
-import { collection, query, orderBy, limit, doc } from 'firebase/firestore';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogFooter, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger 
+} from '@/components/ui/dialog';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
+import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase, setDocumentNonBlocking, addDocumentNonBlocking, useAuth, initiateSignOut } from '@/firebase';
+import { collection, query, orderBy, limit, doc, serverTimestamp } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
 
 export default function DashboardPage() {
   const { user, isUserLoading } = useUser();
+  const auth = useAuth();
   const db = useFirestore();
   const router = useRouter();
+  const { toast } = useToast();
+  
   const [isInitializing, setIsInitializing] = useState(false);
+  const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
+  const [isExpenseDialogOpen, setIsExpenseDialogOpen] = useState(false);
 
-  // Fetch user profile and their specific membership within the org
+  // New Data State
+  const [newInvoice, setNewInvoice] = useState({ customerName: '', amount: '', status: 'Pending', method: 'Credit Card' });
+  const [newExpense, setNewExpense] = useState({ description: '', amount: '', category: 'General' });
+
+  // Fetch user profile
   const userProfileRef = useMemoFirebase(() => {
     if (!user) return null;
     return doc(db, 'users', user.uid);
@@ -52,13 +71,14 @@ export default function DashboardPage() {
   const { data: profile, isLoading: isProfileLoading } = useDoc(userProfileRef);
   const orgId = profile?.organizationId;
 
+  // Fetch organization membership
   const memberRef = useMemoFirebase(() => {
     if (!user || !orgId) return null;
     return doc(db, 'organizations', orgId, 'members', user.uid);
   }, [db, user, orgId]);
 
   const { data: membership } = useDoc(memberRef);
-  const userRole = membership?.role || 'cashier'; // Default to lowest if not found
+  const userRole = membership?.role || 'cashier';
 
   // Permissions logic
   const canManageStaff = userRole === 'admin';
@@ -122,11 +142,47 @@ export default function DashboardPage() {
 
   const { data: expenses, isLoading: isExpensesLoading } = useCollection(expensesQuery);
 
-  // Statistics calculations
+  // Statistics
   const revenue = invoices?.filter(i => i.status === 'Paid').reduce((sum, i) => sum + (Number(i.amount) || 0), 0) || 0;
   const activeInvoicesCount = invoices?.filter(i => i.status !== 'Paid').length || 0;
   const totalExpenses = expenses?.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) || 0;
   const netProfit = revenue - totalExpenses;
+
+  const handleLogout = () => {
+    initiateSignOut(auth).then(() => {
+      router.push('/login');
+    });
+  };
+
+  const handleCreateInvoice = () => {
+    if (!orgId || !newInvoice.customerName || !newInvoice.amount) return;
+    
+    const invoicesRef = collection(db, 'organizations', orgId, 'invoices');
+    addDocumentNonBlocking(invoicesRef, {
+      ...newInvoice,
+      amount: parseFloat(newInvoice.amount),
+      createdAt: new Date().toISOString()
+    });
+
+    setIsInvoiceDialogOpen(false);
+    setNewInvoice({ customerName: '', amount: '', status: 'Pending', method: 'Credit Card' });
+    toast({ title: "Invoice Created", description: `Invoice for ${newInvoice.customerName} added.` });
+  };
+
+  const handleCreateExpense = () => {
+    if (!orgId || !newExpense.description || !newExpense.amount) return;
+
+    const expensesRef = collection(db, 'organizations', orgId, 'expenses');
+    addDocumentNonBlocking(expensesRef, {
+      ...newExpense,
+      amount: parseFloat(newExpense.amount),
+      createdAt: new Date().toISOString()
+    });
+
+    setIsExpenseDialogOpen(false);
+    setNewExpense({ description: '', amount: '', category: 'General' });
+    toast({ title: "Expense Tracked", description: `Added expense for ${newExpense.description}.` });
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
@@ -153,7 +209,7 @@ export default function DashboardPage() {
           </div>
         </div>
         <nav className="flex-grow p-4 space-y-2">
-          <NavItem icon={LayoutDashboard} label="Dashboard" active />
+          <Link href="/dashboard"><NavItem icon={LayoutDashboard} label="Dashboard" active /></Link>
           <NavItem icon={FileText} label="Invoices" />
           {canManageExpenses && <NavItem icon={CreditCard} label="Expenses" />}
           {canManageStaff && (
@@ -189,10 +245,15 @@ export default function DashboardPage() {
             <Button variant="ghost" size="icon" className="relative">
               <Bell className="h-5 w-5" />
             </Button>
-            <Avatar className="h-8 w-8 cursor-pointer ring-2 ring-transparent hover:ring-primary transition-all">
-              <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`} />
-              <AvatarFallback>{user.email?.charAt(0).toUpperCase()}</AvatarFallback>
-            </Avatar>
+            <div className="flex items-center gap-3 ml-2 border-l pl-4">
+              <Avatar className="h-8 w-8 cursor-pointer ring-2 ring-transparent hover:ring-primary transition-all">
+                <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`} />
+                <AvatarFallback>{user.email?.charAt(0).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <Button variant="ghost" size="icon" onClick={handleLogout} title="Logout">
+                <LogOut className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+              </Button>
+            </div>
           </div>
         </header>
 
@@ -202,11 +263,92 @@ export default function DashboardPage() {
                 <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
                 <p className="text-sm text-muted-foreground">Welcome back, {profile?.firstName || 'User'}.</p>
             </div>
-            {canCreateInvoice && (
-              <Button className="gap-2">
-                  <Plus className="h-4 w-4" /> New Invoice
-              </Button>
-            )}
+            <div className="flex gap-3">
+              {canManageExpenses && (
+                <Dialog open={isExpenseDialogOpen} onOpenChange={setIsExpenseDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="gap-2">
+                      <CreditCard className="h-4 w-4" /> Add Expense
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Track Expense</DialogTitle>
+                      <DialogDescription>Record a new business expense.</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Description</label>
+                        <Input placeholder="Office supplies, Software subscription..." value={newExpense.description} onChange={e => setNewExpense({...newExpense, description: e.target.value})} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Amount ($)</label>
+                          <Input type="number" placeholder="0.00" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: e.target.value})} />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Category</label>
+                          <Select value={newExpense.category} onValueChange={val => setNewExpense({...newExpense, category: val})}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Software">Software</SelectItem>
+                              <SelectItem value="Marketing">Marketing</SelectItem>
+                              <SelectItem value="Rent">Rent</SelectItem>
+                              <SelectItem value="Travel">Travel</SelectItem>
+                              <SelectItem value="Other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button onClick={handleCreateExpense} disabled={!newExpense.description || !newExpense.amount}>Record Expense</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
+              {canCreateInvoice && (
+                <Dialog open={isInvoiceDialogOpen} onOpenChange={setIsInvoiceDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="gap-2">
+                      <Plus className="h-4 w-4" /> New Invoice
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>New Invoice</DialogTitle>
+                      <DialogDescription>Create a professional invoice for your customer.</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Customer Name</label>
+                        <Input placeholder="Acme Corp" value={newInvoice.customerName} onChange={e => setNewInvoice({...newInvoice, customerName: e.target.value})} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Amount ($)</label>
+                          <Input type="number" placeholder="0.00" value={newInvoice.amount} onChange={e => setNewInvoice({...newInvoice, amount: e.target.value})} />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Status</label>
+                          <Select value={newInvoice.status} onValueChange={val => setNewInvoice({...newInvoice, status: val})}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Paid">Paid</SelectItem>
+                              <SelectItem value="Pending">Pending</SelectItem>
+                              <SelectItem value="Unpaid">Unpaid</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button onClick={handleCreateInvoice} disabled={!newInvoice.customerName || !newInvoice.amount}>Create Invoice</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -221,7 +363,7 @@ export default function DashboardPage() {
             <SummaryCard 
                 title="Active Invoices" 
                 value={activeInvoicesCount.toString()} 
-                change="Pending" 
+                change="Pending items" 
                 trend="up" 
                 icon={FileText}
                 isLoading={isInvoicesLoading}
@@ -241,7 +383,7 @@ export default function DashboardPage() {
                   title="Net Profit" 
                   value={formatCurrency(netProfit)} 
                   change="Revenue - Expenses" 
-                  trend="up" 
+                  trend={netProfit >= 0 ? "up" : "down"} 
                   icon={TrendingUp}
                   isLoading={isInvoicesLoading || isExpensesLoading}
               />
@@ -252,7 +394,7 @@ export default function DashboardPage() {
             <Card className="lg:col-span-4 border-none shadow-sm">
                 <CardHeader>
                     <CardTitle>Business Performance</CardTitle>
-                    <CardDescription>Activity visualization</CardDescription>
+                    <CardDescription>Activity trends across the last quarter</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="h-[200px] w-full bg-accent/20 rounded-lg flex items-end justify-between px-6 pb-2 gap-2">
@@ -269,22 +411,29 @@ export default function DashboardPage() {
                 <CardHeader>
                     <CardTitle>Recent Activity</CardTitle>
                 </CardHeader>
-                <CardContent>
-                    <div className="space-y-6">
+                <CardContent className="px-0">
+                    <div className="space-y-1">
                         {(!invoices?.length && !expenses?.length) ? (
-                          <p className="text-sm text-muted-foreground text-center py-8">No recent activity.</p>
+                          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                            <FileText className="h-8 w-8 mb-2 opacity-20" />
+                            <p className="text-sm">No recent activity found.</p>
+                          </div>
                         ) : (
-                          <>
-                            {invoices?.slice(0, 3).map((inv) => (
-                              <ActivityItem 
-                                  key={inv.id}
-                                  name={inv.customerName || 'Customer'} 
-                                  desc={`Invoice ${inv.status}`} 
-                                  amount={formatCurrency(inv.amount)} 
-                                  time={inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : 'Now'}
-                              />
-                            ))}
-                          </>
+                          <div className="max-h-[300px] overflow-y-auto px-6 space-y-4">
+                            {[...(invoices || []), ...(expenses || [])]
+                              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                              .slice(0, 10)
+                              .map((item) => (
+                                <ActivityItem 
+                                    key={item.id}
+                                    name={('customerName' in item ? item.customerName : item.description) || 'Transaction'} 
+                                    desc={'status' in item ? `Invoice ${item.status}` : item.category} 
+                                    amount={formatCurrency(item.amount)} 
+                                    time={item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Now'}
+                                    isExpense={!('status' in item)}
+                                />
+                              ))}
+                          </div>
                         )}
                     </div>
                 </CardContent>
@@ -329,12 +478,12 @@ function SummaryCard({ title, value, change, trend, icon: Icon, isLoading }: { t
     );
 }
 
-function ActivityItem({ name, desc, amount, time }: { name: string, desc: string, amount: string, time: string }) {
+function ActivityItem({ name, desc, amount, time, isExpense }: { name: string, desc: string, amount: string, time: string, isExpense?: boolean }) {
     return (
-        <div className="flex items-center justify-between group">
+        <div className="flex items-center justify-between group py-2 border-b last:border-0">
             <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full flex items-center justify-center border bg-primary/5 border-primary/20">
-                    <FileText className="h-4 w-4 text-primary" />
+                <div className={`h-10 w-10 rounded-full flex items-center justify-center border ${isExpense ? 'bg-destructive/5 border-destructive/20' : 'bg-primary/5 border-primary/20'}`}>
+                    {isExpense ? <CreditCard className="h-4 w-4 text-destructive" /> : <FileText className="h-4 w-4 text-primary" />}
                 </div>
                 <div>
                     <p className="text-sm font-bold leading-none">{name}</p>
@@ -342,7 +491,7 @@ function ActivityItem({ name, desc, amount, time }: { name: string, desc: string
                 </div>
             </div>
             <div className="text-right">
-                <p className="text-sm font-bold">{amount}</p>
+                <p className={`text-sm font-bold ${isExpense ? 'text-destructive' : 'text-primary'}`}>{isExpense ? `-${amount}` : amount}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">{time}</p>
             </div>
         </div>

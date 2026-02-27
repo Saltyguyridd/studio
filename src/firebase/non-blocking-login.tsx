@@ -1,4 +1,3 @@
-
 'use client';
 import {
   Auth,
@@ -8,6 +7,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   UserCredential,
+  signOut,
 } from 'firebase/auth';
 
 /** 
@@ -34,4 +34,9 @@ export function initiateEmailSignUp(authInstance: Auth, email: string, password:
 /** Initiate email/password sign-in. */
 export function initiateEmailSignIn(authInstance: Auth, email: string, password: string): Promise<UserCredential> {
   return signInWithEmailAndPassword(authInstance, email, password);
+}
+
+/** Initiate sign out. */
+export function initiateSignOut(authInstance: Auth): Promise<void> {
+  return signOut(authInstance);
 }
