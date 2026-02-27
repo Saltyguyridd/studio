@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -112,6 +111,7 @@ export default function DashboardPage() {
 
   // Initialization logic for new users (Google or Email)
   useEffect(() => {
+    // Only initialize if we definitely have a user but definitely don't have a profile yet
     if (!isUserLoading && user && !isProfileLoading && !profile && !isInitializing) {
       setIsInitializing(true);
       const generatedOrgId = `org_${user.uid}`;
@@ -119,9 +119,11 @@ export default function DashboardPage() {
       const userRef = doc(db, 'users', user.uid);
       const memberRef = doc(db, 'organizations', generatedOrgId, 'members', user.uid);
 
-      // We perform these in a specific order to help security rules
       const init = async () => {
         try {
+          // Use a small delay to ensure firestore is ready for writes
+          await new Promise(r => setTimeout(r, 500));
+          
           setDocumentNonBlocking(orgRef, {
             id: generatedOrgId,
             name: `${user.email?.split('@')[0]}'s Organization`,
@@ -148,7 +150,8 @@ export default function DashboardPage() {
         } catch (e) {
           console.error("Initialization failed", e);
         } finally {
-          setTimeout(() => setIsInitializing(false), 1000);
+          // Stay in initializing state for a bit to allow rules to propogate
+          setTimeout(() => setIsInitializing(false), 2000);
         }
       };
 
@@ -162,25 +165,25 @@ export default function DashboardPage() {
     }
   }, [user, isUserLoading, router]);
 
-  // Data fetching - gated by initialization and existence of profile
+  // Data fetching - strictly gated by initialization and existence of profile/membership
   const invoicesQuery = useMemoFirebase(() => {
-    if (!orgId || isMembershipLoading || !membership || isInitializing) return null;
+    if (!orgId || isMembershipLoading || !membership || isInitializing || isProfileLoading) return null;
     return query(collection(db, 'organizations', orgId, 'invoices'), orderBy('createdAt', 'desc'));
-  }, [db, orgId, isMembershipLoading, membership, isInitializing]);
+  }, [db, orgId, isMembershipLoading, membership, isInitializing, isProfileLoading]);
 
   const { data: invoices, isLoading: isInvoicesLoading } = useCollection(invoicesQuery);
 
   const expensesQuery = useMemoFirebase(() => {
-    if (!orgId || isMembershipLoading || !membership || isInitializing) return null;
+    if (!orgId || isMembershipLoading || !membership || isInitializing || isProfileLoading) return null;
     return query(collection(db, 'organizations', orgId, 'expenses'), orderBy('createdAt', 'desc'));
-  }, [db, orgId, isMembershipLoading, membership, isInitializing]);
+  }, [db, orgId, isMembershipLoading, membership, isInitializing, isProfileLoading]);
 
   const { data: expenses, isLoading: isExpensesLoading } = useCollection(expensesQuery);
 
   const membersQuery = useMemoFirebase(() => {
-    if (!orgId || isMembershipLoading || !membership || isInitializing) return null;
+    if (!orgId || isMembershipLoading || !membership || isInitializing || isProfileLoading) return null;
     return collection(db, 'organizations', orgId, 'members');
-  }, [db, orgId, isMembershipLoading, membership, isInitializing]);
+  }, [db, orgId, isMembershipLoading, membership, isInitializing, isProfileLoading]);
 
   const { data: members, isLoading: isMembersLoading } = useCollection(membersQuery);
 
