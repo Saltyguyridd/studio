@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -77,7 +78,7 @@ export default function DashboardPage() {
     return doc(db, 'organizations', orgId, 'members', user.uid);
   }, [db, user, orgId]);
 
-  const { data: membership } = useDoc(memberRef);
+  const { data: membership, isLoading: isMembershipLoading } = useDoc(memberRef);
   const userRole = membership?.role || 'cashier';
 
   // Permissions logic
@@ -127,18 +128,18 @@ export default function DashboardPage() {
     }
   }, [user, isUserLoading, router]);
 
-  // Data fetching
+  // Data fetching - IMPORTANT: Wait for membership to avoid security rules rejection
   const invoicesQuery = useMemoFirebase(() => {
-    if (!orgId) return null;
+    if (!orgId || isMembershipLoading || !membership) return null;
     return query(collection(db, 'organizations', orgId, 'invoices'), orderBy('createdAt', 'desc'), limit(10));
-  }, [db, orgId]);
+  }, [db, orgId, isMembershipLoading, membership]);
 
   const { data: invoices, isLoading: isInvoicesLoading } = useCollection(invoicesQuery);
 
   const expensesQuery = useMemoFirebase(() => {
-    if (!orgId) return null;
+    if (!orgId || isMembershipLoading || !membership) return null;
     return query(collection(db, 'organizations', orgId, 'expenses'), orderBy('createdAt', 'desc'), limit(10));
-  }, [db, orgId]);
+  }, [db, orgId, isMembershipLoading, membership]);
 
   const { data: expenses, isLoading: isExpensesLoading } = useCollection(expensesQuery);
 

@@ -39,10 +39,11 @@ export default function StaffManagementPage() {
   const userRole = membership?.role;
   const isAdmin = userRole === 'admin';
 
+  // IMPORTANT: Wait for membership to avoid security rules rejection
   const membersQuery = useMemoFirebase(() => {
-    if (!orgId) return null;
+    if (!orgId || isMembershipLoading || !membership) return null;
     return collection(db, 'organizations', orgId, 'members');
-  }, [db, orgId]);
+  }, [db, orgId, isMembershipLoading, membership]);
 
   const { data: members, isLoading: isMembersLoading } = useCollection(membersQuery);
 
