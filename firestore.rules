@@ -37,9 +37,11 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow update: if hasRole(organizationId, ['admin']);
 
-      // Staff Management (Admin only)
+      // Staff Management
       match /members/{userId} {
-        allow read: if isMember(organizationId);
+        // Users can always read their own membership status to facilitate login/onboarding
+        allow read: if isMember(organizationId) || isUser(userId);
+        // Only admins can write/manage other members
         allow write: if hasRole(organizationId, ['admin']);
       }
 
