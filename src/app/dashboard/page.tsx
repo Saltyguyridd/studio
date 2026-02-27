@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -21,7 +22,6 @@ import {
   UserPlus,
   Trash2,
   Building,
-  Sparkles,
   CheckCircle,
   Clock,
   AlertCircle
@@ -70,9 +70,8 @@ import {
 } from '@/firebase';
 import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { getFinancialInsights, type InsightOutput } from '@/ai/flows/financial-insights';
 
-type TabType = 'overview' | 'invoices' | 'expenses' | 'staff' | 'settings' | 'ai';
+type TabType = 'overview' | 'invoices' | 'expenses' | 'staff' | 'settings';
 
 export default function DashboardPage() {
   const { user, isUserLoading } = useUser();
@@ -83,8 +82,6 @@ export default function DashboardPage() {
   
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [isInitializing, setIsInitializing] = useState(false);
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [aiInsights, setAiInsights] = useState<InsightOutput | null>(null);
   
   // Dialog States
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
@@ -257,23 +254,6 @@ export default function DashboardPage() {
     toast({ variant: "destructive", title: "Expense Deleted" });
   };
 
-  const handleGetAiInsights = async () => {
-    if (!invoices || !expenses) return;
-    setIsAiLoading(true);
-    try {
-      const insights = await getFinancialInsights({
-        invoices: invoices.map(i => ({ amount: i.amount, status: i.status, customerName: i.customerName })),
-        expenses: expenses.map(e => ({ amount: e.amount, description: e.description, category: e.category }))
-      });
-      setAiInsights(insights);
-      setActiveTab('ai');
-    } catch (e) {
-      toast({ variant: "destructive", title: "AI Error", description: "Failed to generate financial insights." });
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
@@ -307,28 +287,16 @@ export default function DashboardPage() {
           <NavItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
           <NavItem icon={FileText} label="Invoices" active={activeTab === 'invoices'} onClick={() => setActiveTab('invoices')} />
           {canManageExpenses && <NavItem icon={CreditCard} label="Expenses" active={activeTab === 'expenses'} onClick={() => setActiveTab('expenses')} />}
-          <NavItem icon={Sparkles} label="AI Advisor" active={activeTab === 'ai'} onClick={() => setActiveTab('ai')} />
           {canManageStaff && <NavItem icon={Users} label="Staff Management" active={activeTab === 'staff'} onClick={() => setActiveTab('staff')} />}
           <NavItem icon={Settings} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
         </nav>
-        <div className="p-4 border-t">
-          <Button 
-            variant="outline" 
-            className="w-full gap-2 border-primary/20 hover:bg-primary/5 group" 
-            onClick={handleGetAiInsights}
-            disabled={isAiLoading}
-          >
-            {isAiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-primary group-hover:animate-pulse" />}
-            Get AI Insights
-          </Button>
-        </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 border-b bg-background flex items-center justify-between px-6">
           <div className="flex items-center gap-4 flex-1 max-w-md text-sm text-muted-foreground font-medium">
-             {activeTab === 'ai' ? 'AI Financial Advisor' : activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} View
+             {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} View
           </div>
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" className="relative">
@@ -517,93 +485,6 @@ export default function DashboardPage() {
                 </Card>
               </div>
             </>
-          )}
-
-          {/* TAB: AI ADVISOR */}
-          {activeTab === 'ai' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                    <Sparkles className="h-6 w-6 text-primary" /> AI Financial Advisor
-                  </h1>
-                  <p className="text-sm text-muted-foreground">Intelligent analysis of your business performance and cash flow.</p>
-                </div>
-                <Button variant="outline" size="sm" onClick={handleGetAiInsights} disabled={isAiLoading}>
-                  {isAiLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
-                  Refresh Analysis
-                </Button>
-              </div>
-
-              {!aiInsights && !isAiLoading ? (
-                <Card className="border-dashed border-2 flex flex-col items-center justify-center py-16 text-center space-y-4">
-                  <div className="bg-primary/10 p-4 rounded-full">
-                    <Sparkles className="h-10 w-10 text-primary" />
-                  </div>
-                  <div className="max-w-md space-y-2">
-                    <h3 className="text-lg font-bold">No Analysis Generated Yet</h3>
-                    <p className="text-sm text-muted-foreground">Click the button below to have our AI analyze your recent invoices and expenses to provide growth recommendations.</p>
-                  </div>
-                  <Button onClick={handleGetAiInsights} disabled={isAiLoading}>
-                    Generate Financial Health Report
-                  </Button>
-                </Card>
-              ) : isAiLoading ? (
-                <Card className="py-20 flex flex-col items-center justify-center space-y-4">
-                  <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                  <p className="text-muted-foreground animate-pulse">Analyzing transactions, identifying trends, and calculating metrics...</p>
-                </Card>
-              ) : (
-                <div className="grid lg:grid-cols-3 gap-6">
-                  <Card className="lg:col-span-1 border-none shadow-lg bg-primary text-primary-foreground relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10">
-                      <TrendingUp className="h-32 w-32" />
-                    </div>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Business Health Score</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex flex-col items-center justify-center py-8">
-                      <div className="relative flex items-center justify-center">
-                        <svg className="h-32 w-32 transform -rotate-90">
-                          <circle cx="64" cy="64" r="58" stroke="currentColor" strokeWidth="8" fill="transparent" className="opacity-20" />
-                          <circle cx="64" cy="64" r="58" stroke="white" strokeWidth="8" fill="transparent" strokeDasharray={364} strokeDashoffset={364 - (364 * (aiInsights?.healthScore || 0)) / 100} className="transition-all duration-1000 ease-out" />
-                        </svg>
-                        <span className="absolute text-4xl font-black">{aiInsights?.healthScore}</span>
-                      </div>
-                      <div className="mt-6 flex flex-col items-center gap-2">
-                        <Badge variant="secondary" className="bg-white/20 hover:bg-white/30 text-white">
-                          Cash Flow: {aiInsights?.cashFlowStatus}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="lg:col-span-2 border-none shadow-sm">
-                    <CardHeader>
-                      <CardTitle>AI Summary & Recommendations</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="bg-accent/30 p-4 rounded-xl text-sm leading-relaxed italic">
-                        "{aiInsights?.summary}"
-                      </div>
-                      <div className="space-y-3">
-                        <h4 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">Key Recommendations</h4>
-                        <div className="grid sm:grid-cols-2 gap-3">
-                          {aiInsights?.recommendations.map((rec, i) => (
-                            <div key={i} className="flex items-start gap-3 p-3 bg-background border rounded-lg">
-                              <div className="bg-primary/10 p-1.5 rounded-md mt-0.5">
-                                <CheckCircle className="h-3.5 w-3.5 text-primary" />
-                              </div>
-                              <p className="text-xs font-medium leading-normal">{rec}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-            </div>
           )}
 
           {/* TAB: INVOICES */}

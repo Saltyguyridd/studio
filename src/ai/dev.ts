@@ -1,2 +1,3 @@
-// Flows will be imported for their side effects in this file.
-import './flows/financial-insights';
+
+// AI features have been disabled.
+export {};

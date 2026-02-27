@@ -14,7 +14,6 @@ import {
   PieChart, 
   CheckCircle2, 
   ShieldCheck, 
-  Zap,
   ArrowRight,
   LayoutDashboard
 } from 'lucide-react';
@@ -33,10 +32,6 @@ export default function Home() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid lg:grid-cols-2 gap-12 items-center">
               <div className="space-y-8 animate-fade-in-up">
-                <div className="inline-flex items-center rounded-full border px-3 py-1 text-sm font-medium text-primary bg-accent/30 border-accent">
-                  <Zap className="mr-2 h-4 w-4" />
-                  <span>Now with AI-powered forecasting</span>
-                </div>
                 <h1 className="text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight text-primary">
                   Master Your Finances with <span className="text-secondary">LedgerStream</span>
                 </h1>
