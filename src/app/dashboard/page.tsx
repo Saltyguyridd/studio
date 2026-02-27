@@ -3,7 +3,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { 
   BarChart, 
   CreditCard, 
@@ -13,7 +12,6 @@ import {
   TrendingUp, 
   Users,
   Bell,
-  Search,
   ArrowUpRight,
   ArrowDownRight,
   Plus,
@@ -21,14 +19,10 @@ import {
   Settings,
   ShieldCheck,
   LogOut,
-  X,
   ChevronRight,
   UserPlus,
   Trash2,
-  Building,
-  CheckCircle2,
-  Clock,
-  AlertCircle
+  Building
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -60,7 +54,7 @@ import {
   TableRow 
 } from '@/components/ui/table';
 import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase, setDocumentNonBlocking, addDocumentNonBlocking, updateDocumentNonBlocking, useAuth, initiateSignOut } from '@/firebase';
-import { collection, query, orderBy, limit, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 
 type TabType = 'overview' | 'invoices' | 'expenses' | 'staff' | 'settings';
@@ -103,7 +97,7 @@ export default function DashboardPage() {
   const { data: membership, isLoading: isMembershipLoading } = useDoc(memberRef);
   const userRole = membership?.role || 'cashier';
 
-  // Fetch Organization details for settings
+  // Fetch Organization details
   const orgRef = useMemoFirebase(() => {
     if (!orgId) return null;
     return doc(db, 'organizations', orgId);
@@ -116,7 +110,7 @@ export default function DashboardPage() {
   const canCreateInvoice = ['admin', 'manager', 'cashier'].includes(userRole);
   const canManageExpenses = ['admin', 'manager'].includes(userRole);
 
-  // Initialization logic for new users
+  // Initialization logic for new users (Google or Email)
   useEffect(() => {
     if (!isUserLoading && user && !isProfileLoading && !profile && !isInitializing) {
       setIsInitializing(true);
@@ -125,31 +119,40 @@ export default function DashboardPage() {
       const userRef = doc(db, 'users', user.uid);
       const memberRef = doc(db, 'organizations', generatedOrgId, 'members', user.uid);
 
-      setDocumentNonBlocking(orgRef, {
-        id: generatedOrgId,
-        name: `${user.email?.split('@')[0]}'s Organization`,
-        ownerId: user.uid,
-        createdAt: new Date().toISOString()
-      }, { merge: true });
+      // We perform these in a specific order to help security rules
+      const init = async () => {
+        try {
+          setDocumentNonBlocking(orgRef, {
+            id: generatedOrgId,
+            name: `${user.email?.split('@')[0]}'s Organization`,
+            ownerId: user.uid,
+            createdAt: new Date().toISOString()
+          }, { merge: true });
 
-      setDocumentNonBlocking(userRef, {
-        id: user.uid,
-        email: user.email,
-        firstName: user.displayName?.split(' ')[0] || 'New',
-        lastName: user.displayName?.split(' ')[1] || 'User',
-        organizationId: generatedOrgId,
-        createdAt: new Date().toISOString()
-      }, { merge: true });
+          setDocumentNonBlocking(userRef, {
+            id: user.uid,
+            email: user.email,
+            firstName: user.displayName?.split(' ')[0] || 'New',
+            lastName: user.displayName?.split(' ')[1] || 'User',
+            organizationId: generatedOrgId,
+            createdAt: new Date().toISOString()
+          }, { merge: true });
 
-      setDocumentNonBlocking(memberRef, {
-        id: user.uid,
-        userId: user.uid,
-        organizationId: generatedOrgId,
-        role: 'admin',
-        email: user.email
-      }, { merge: true });
-      
-      setTimeout(() => setIsInitializing(false), 500);
+          setDocumentNonBlocking(memberRef, {
+            id: user.uid,
+            userId: user.uid,
+            organizationId: generatedOrgId,
+            role: 'admin',
+            email: user.email
+          }, { merge: true });
+        } catch (e) {
+          console.error("Initialization failed", e);
+        } finally {
+          setTimeout(() => setIsInitializing(false), 1000);
+        }
+      };
+
+      init();
     }
   }, [isUserLoading, user, isProfileLoading, profile, isInitializing, db]);
 
@@ -159,7 +162,7 @@ export default function DashboardPage() {
     }
   }, [user, isUserLoading, router]);
 
-  // Data fetching
+  // Data fetching - gated by initialization and existence of profile
   const invoicesQuery = useMemoFirebase(() => {
     if (!orgId || isMembershipLoading || !membership || isInitializing) return null;
     return query(collection(db, 'organizations', orgId, 'invoices'), orderBy('createdAt', 'desc'));
@@ -238,7 +241,12 @@ export default function DashboardPage() {
   if (isUserLoading || !user || (isProfileLoading && !profile) || isInitializing) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground animate-pulse">
+            {isInitializing ? "Setting up your organization..." : "Loading dashboard..."}
+          </p>
+        </div>
       </div>
     );
   }

@@ -17,7 +17,10 @@ service cloud.firestore {
     }
 
     function isOwner(orgId) {
-      return isSignedIn() && exists(/databases/$(database)/documents/organizations/$(orgId)) && getOrg(orgId).ownerId == request.auth.uid;
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/organizations/$(orgId)) && getOrg(orgId).ownerId == request.auth.uid) ||
+        (request.resource.data.ownerId == request.auth.uid)
+      );
     }
 
     function getMember(orgId) {
@@ -50,8 +53,9 @@ service cloud.firestore {
 
       // Staff Management
       match /members/{userId} {
-        allow read: if isMember(organizationId) || isUser(userId);
-        allow write: if hasRole(organizationId, ['admin']);
+        allow read: if isSignedIn() && (isMember(organizationId) || isUser(userId));
+        allow create: if isSignedIn() && (isUser(userId) || hasRole(organizationId, ['admin']));
+        allow update, delete: if hasRole(organizationId, ['admin']);
       }
 
       // Invoices
