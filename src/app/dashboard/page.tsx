@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  BarChart, 
   CreditCard, 
   DollarSign, 
   FileText, 
@@ -21,9 +20,13 @@ import {
   ChevronRight,
   UserPlus,
   Trash2,
-  Building
+  Building,
+  Sparkles,
+  CheckCircle,
+  Clock,
+  AlertCircle
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
@@ -52,11 +55,24 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { useUser, useFirestore, useDoc, useCollection, useMemoFirebase, setDocumentNonBlocking, addDocumentNonBlocking, updateDocumentNonBlocking, useAuth, initiateSignOut } from '@/firebase';
+import { 
+  useUser, 
+  useFirestore, 
+  useDoc, 
+  useCollection, 
+  useMemoFirebase, 
+  setDocumentNonBlocking, 
+  addDocumentNonBlocking, 
+  updateDocumentNonBlocking, 
+  deleteDocumentNonBlocking,
+  useAuth, 
+  initiateSignOut 
+} from '@/firebase';
 import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { getFinancialInsights, type InsightOutput } from '@/ai/flows/financial-insights';
 
-type TabType = 'overview' | 'invoices' | 'expenses' | 'staff' | 'settings';
+type TabType = 'overview' | 'invoices' | 'expenses' | 'staff' | 'settings' | 'ai';
 
 export default function DashboardPage() {
   const { user, isUserLoading } = useUser();
@@ -67,6 +83,8 @@ export default function DashboardPage() {
   
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [isInitializing, setIsInitializing] = useState(false);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiInsights, setAiInsights] = useState<InsightOutput | null>(null);
   
   // Dialog States
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
@@ -109,9 +127,8 @@ export default function DashboardPage() {
   const canCreateInvoice = ['admin', 'manager', 'cashier'].includes(userRole);
   const canManageExpenses = ['admin', 'manager'].includes(userRole);
 
-  // Initialization logic for new users (Google or Email)
+  // Initialization logic for new users
   useEffect(() => {
-    // Only initialize if we definitely have a user but definitely don't have a profile yet
     if (!isUserLoading && user && !isProfileLoading && !profile && !isInitializing) {
       setIsInitializing(true);
       const generatedOrgId = `org_${user.uid}`;
@@ -121,7 +138,6 @@ export default function DashboardPage() {
 
       const init = async () => {
         try {
-          // Use a small delay to ensure firestore is ready for writes
           await new Promise(r => setTimeout(r, 500));
           
           setDocumentNonBlocking(orgRef, {
@@ -150,11 +166,9 @@ export default function DashboardPage() {
         } catch (e) {
           console.error("Initialization failed", e);
         } finally {
-          // Stay in initializing state for a bit to allow rules to propogate
           setTimeout(() => setIsInitializing(false), 2000);
         }
       };
-
       init();
     }
   }, [isUserLoading, user, isProfileLoading, profile, isInitializing, db]);
@@ -165,7 +179,7 @@ export default function DashboardPage() {
     }
   }, [user, isUserLoading, router]);
 
-  // Data fetching - strictly gated by initialization and existence of profile/membership
+  // Data fetching
   const invoicesQuery = useMemoFirebase(() => {
     if (!orgId || isMembershipLoading || !membership || isInitializing || isProfileLoading) return null;
     return query(collection(db, 'organizations', orgId, 'invoices'), orderBy('createdAt', 'desc'));
@@ -225,16 +239,39 @@ export default function DashboardPage() {
     toast({ title: "Expense Tracked", description: `Added expense for ${newExpense.description}.` });
   };
 
-  const handleUpdateOrgName = (newName: string) => {
-    if (!orgId || !newName) return;
-    updateDocumentNonBlocking(doc(db, 'organizations', orgId), { name: newName });
-    toast({ title: "Organization Updated", description: "Business name saved successfully." });
+  const handleUpdateInvoiceStatus = (id: string, status: string) => {
+    if (!orgId) return;
+    updateDocumentNonBlocking(doc(db, 'organizations', orgId, 'invoices', id), { status });
+    toast({ title: "Status Updated", description: `Invoice marked as ${status}.` });
   };
 
-  const handleInviteStaff = () => {
-    if (!newStaffEmail) return;
-    toast({ title: "Invite Sent", description: `Invitation sent to ${newStaffEmail} as ${newStaffRole}.` });
-    setNewStaffEmail('');
+  const handleDeleteInvoice = (id: string) => {
+    if (!orgId || !canManageStaff) return;
+    deleteDocumentNonBlocking(doc(db, 'organizations', orgId, 'invoices', id));
+    toast({ variant: "destructive", title: "Invoice Deleted" });
+  };
+
+  const handleDeleteExpense = (id: string) => {
+    if (!orgId || !canManageStaff) return;
+    deleteDocumentNonBlocking(doc(db, 'organizations', orgId, 'expenses', id));
+    toast({ variant: "destructive", title: "Expense Deleted" });
+  };
+
+  const handleGetAiInsights = async () => {
+    if (!invoices || !expenses) return;
+    setIsAiLoading(true);
+    try {
+      const insights = await getFinancialInsights({
+        invoices: invoices.map(i => ({ amount: i.amount, status: i.status, customerName: i.customerName })),
+        expenses: expenses.map(e => ({ amount: e.amount, description: e.description, category: e.category }))
+      });
+      setAiInsights(insights);
+      setActiveTab('ai');
+    } catch (e) {
+      toast({ variant: "destructive", title: "AI Error", description: "Failed to generate financial insights." });
+    } finally {
+      setIsAiLoading(false);
+    }
   };
 
   const formatCurrency = (amount: number) => {
@@ -247,7 +284,7 @@ export default function DashboardPage() {
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground animate-pulse">
-            {isInitializing ? "Setting up your organization..." : "Loading dashboard..."}
+            {isInitializing ? "Setting up your organization..." : "Loading LedgerStream..."}
           </p>
         </div>
       </div>
@@ -270,19 +307,20 @@ export default function DashboardPage() {
           <NavItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
           <NavItem icon={FileText} label="Invoices" active={activeTab === 'invoices'} onClick={() => setActiveTab('invoices')} />
           {canManageExpenses && <NavItem icon={CreditCard} label="Expenses" active={activeTab === 'expenses'} onClick={() => setActiveTab('expenses')} />}
+          <NavItem icon={Sparkles} label="AI Advisor" active={activeTab === 'ai'} onClick={() => setActiveTab('ai')} />
           {canManageStaff && <NavItem icon={Users} label="Staff Management" active={activeTab === 'staff'} onClick={() => setActiveTab('staff')} />}
           <NavItem icon={Settings} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
         </nav>
         <div className="p-4 border-t">
-          <div className="bg-primary/5 rounded-xl p-4 space-y-3">
-            <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                <p className="text-xs font-semibold text-primary uppercase tracking-wider">Access Level</p>
-            </div>
-            <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="capitalize">{userRole}</Badge>
-            </div>
-          </div>
+          <Button 
+            variant="outline" 
+            className="w-full gap-2 border-primary/20 hover:bg-primary/5 group" 
+            onClick={handleGetAiInsights}
+            disabled={isAiLoading}
+          >
+            {isAiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-primary group-hover:animate-pulse" />}
+            Get AI Insights
+          </Button>
         </div>
       </aside>
 
@@ -290,7 +328,7 @@ export default function DashboardPage() {
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 border-b bg-background flex items-center justify-between px-6">
           <div className="flex items-center gap-4 flex-1 max-w-md text-sm text-muted-foreground font-medium">
-             {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} View
+             {activeTab === 'ai' ? 'AI Financial Advisor' : activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} View
           </div>
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" className="relative">
@@ -320,7 +358,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                     <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
-                    <p className="text-sm text-muted-foreground">Welcome back, {profile?.firstName || 'User'}. Here's what's happening today.</p>
+                    <p className="text-sm text-muted-foreground">Welcome back, {profile?.firstName || 'User'}. Business is looking {netProfit >= 0 ? 'good' : 'tight'}.</p>
                 </div>
                 <div className="flex gap-3">
                   {canManageExpenses && (
@@ -421,15 +459,24 @@ export default function DashboardPage() {
                 <Card className="lg:col-span-4 border-none shadow-sm">
                     <CardHeader>
                         <CardTitle>Business Performance</CardTitle>
-                        <CardDescription>Activity trends based on current records</CardDescription>
+                        <CardDescription>Visualizing revenue flow over recent transactions</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[200px] w-full bg-accent/20 rounded-lg flex items-end justify-between px-6 pb-2 gap-2 overflow-hidden">
-                            {[40, 65, 45, 80, 55, 90, 75, 85, 60, 95, 80, 100].map((h, i) => (
-                                <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                                    <div className="w-full bg-primary/40 rounded-t-sm animate-in slide-in-from-bottom duration-1000" style={{ height: `${h}%`, transitionDelay: `${i * 50}ms` }}></div>
+                        <div className="h-[200px] w-full bg-accent/20 rounded-lg flex items-end justify-between px-6 pb-2 gap-2 overflow-hidden relative">
+                            {(!invoices?.length) ? (
+                              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm italic">
+                                Create an invoice to see performance data
+                              </div>
+                            ) : (
+                              invoices.slice(0, 12).reverse().map((inv, i) => (
+                                <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-help">
+                                    <div className={`w-full ${inv.status === 'Paid' ? 'bg-primary/40' : 'bg-muted'} rounded-t-sm transition-all duration-500 hover:scale-x-110`} style={{ height: `${Math.min(100, (inv.amount / (Math.max(...invoices.map(x => x.amount)) || 1)) * 100)}%` }}></div>
+                                    <div className="hidden group-hover:block absolute top-2 left-1/2 -translate-x-1/2 bg-popover text-popover-foreground text-[10px] px-2 py-1 rounded shadow-lg z-10">
+                                      {inv.customerName}: {formatCurrency(inv.amount)}
+                                    </div>
                                 </div>
-                            ))}
+                              ))
+                            )}
                         </div>
                     </CardContent>
                 </Card>
@@ -443,18 +490,18 @@ export default function DashboardPage() {
                             {(!invoices?.length && !expenses?.length) ? (
                               <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                                 <FileText className="h-8 w-8 mb-2 opacity-20" />
-                                <p className="text-sm">No recent activity found.</p>
+                                <p className="text-sm">No recent transactions.</p>
                               </div>
                             ) : (
                               <div className="max-h-[300px] overflow-y-auto px-6 space-y-4">
                                 {[...(invoices || []), ...(expenses || [])]
                                   .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                                  .slice(0, 10)
+                                  .slice(0, 8)
                                   .map((item) => (
                                     <ActivityItem 
                                         key={item.id}
                                         name={('customerName' in item ? item.customerName : item.description) || 'Transaction'} 
-                                        desc={'status' in item ? `Invoice ${item.status}` : item.category} 
+                                        desc={'status' in item ? `Invoice: ${item.status}` : `Expense: ${item.category}`} 
                                         amount={formatCurrency(item.amount)} 
                                         time={item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Now'}
                                         isExpense={!('status' in item)}
@@ -464,9 +511,99 @@ export default function DashboardPage() {
                             )}
                         </div>
                     </CardContent>
+                    <CardFooter className="pt-2 border-t mt-4 px-6 flex justify-center">
+                      <Button variant="ghost" size="sm" className="text-xs text-primary" onClick={() => setActiveTab('invoices')}>View All Records</Button>
+                    </CardFooter>
                 </Card>
               </div>
             </>
+          )}
+
+          {/* TAB: AI ADVISOR */}
+          {activeTab === 'ai' && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                    <Sparkles className="h-6 w-6 text-primary" /> AI Financial Advisor
+                  </h1>
+                  <p className="text-sm text-muted-foreground">Intelligent analysis of your business performance and cash flow.</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={handleGetAiInsights} disabled={isAiLoading}>
+                  {isAiLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                  Refresh Analysis
+                </Button>
+              </div>
+
+              {!aiInsights && !isAiLoading ? (
+                <Card className="border-dashed border-2 flex flex-col items-center justify-center py-16 text-center space-y-4">
+                  <div className="bg-primary/10 p-4 rounded-full">
+                    <Sparkles className="h-10 w-10 text-primary" />
+                  </div>
+                  <div className="max-w-md space-y-2">
+                    <h3 className="text-lg font-bold">No Analysis Generated Yet</h3>
+                    <p className="text-sm text-muted-foreground">Click the button below to have our AI analyze your recent invoices and expenses to provide growth recommendations.</p>
+                  </div>
+                  <Button onClick={handleGetAiInsights} disabled={isAiLoading}>
+                    Generate Financial Health Report
+                  </Button>
+                </Card>
+              ) : isAiLoading ? (
+                <Card className="py-20 flex flex-col items-center justify-center space-y-4">
+                  <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                  <p className="text-muted-foreground animate-pulse">Analyzing transactions, identifying trends, and calculating metrics...</p>
+                </Card>
+              ) : (
+                <div className="grid lg:grid-cols-3 gap-6">
+                  <Card className="lg:col-span-1 border-none shadow-lg bg-primary text-primary-foreground relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                      <TrendingUp className="h-32 w-32" />
+                    </div>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Business Health Score</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col items-center justify-center py-8">
+                      <div className="relative flex items-center justify-center">
+                        <svg className="h-32 w-32 transform -rotate-90">
+                          <circle cx="64" cy="64" r="58" stroke="currentColor" strokeWidth="8" fill="transparent" className="opacity-20" />
+                          <circle cx="64" cy="64" r="58" stroke="white" strokeWidth="8" fill="transparent" strokeDasharray={364} strokeDashoffset={364 - (364 * (aiInsights?.healthScore || 0)) / 100} className="transition-all duration-1000 ease-out" />
+                        </svg>
+                        <span className="absolute text-4xl font-black">{aiInsights?.healthScore}</span>
+                      </div>
+                      <div className="mt-6 flex flex-col items-center gap-2">
+                        <Badge variant="secondary" className="bg-white/20 hover:bg-white/30 text-white">
+                          Cash Flow: {aiInsights?.cashFlowStatus}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="lg:col-span-2 border-none shadow-sm">
+                    <CardHeader>
+                      <CardTitle>AI Summary & Recommendations</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="bg-accent/30 p-4 rounded-xl text-sm leading-relaxed italic">
+                        "{aiInsights?.summary}"
+                      </div>
+                      <div className="space-y-3">
+                        <h4 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">Key Recommendations</h4>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          {aiInsights?.recommendations.map((rec, i) => (
+                            <div key={i} className="flex items-start gap-3 p-3 bg-background border rounded-lg">
+                              <div className="bg-primary/10 p-1.5 rounded-md mt-0.5">
+                                <CheckCircle className="h-3.5 w-3.5 text-primary" />
+                              </div>
+                              <p className="text-xs font-medium leading-normal">{rec}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </div>
           )}
 
           {/* TAB: INVOICES */}
@@ -474,8 +611,8 @@ export default function DashboardPage() {
             <div className="space-y-6 animate-in fade-in duration-500">
                <div className="flex items-center justify-between">
                   <div className="space-y-1">
-                    <h1 className="text-2xl font-bold tracking-tight">Invoice Management</h1>
-                    <p className="text-sm text-muted-foreground">Detailed history of all client billings.</p>
+                    <h1 className="text-2xl font-bold tracking-tight">Invoices</h1>
+                    <p className="text-sm text-muted-foreground">Billing history and status management.</p>
                   </div>
                   {canCreateInvoice && (
                     <Button className="gap-2" onClick={() => setIsInvoiceDialogOpen(true)}>
@@ -484,16 +621,16 @@ export default function DashboardPage() {
                   )}
                </div>
 
-               <Card className="border-none shadow-sm">
+               <Card className="border-none shadow-sm overflow-hidden">
                  <CardContent className="p-0">
                     <Table>
                       <TableHeader>
-                        <TableRow>
+                        <TableRow className="bg-accent/10">
                           <TableHead>Customer</TableHead>
                           <TableHead>Date</TableHead>
                           <TableHead>Amount</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead>Method</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -507,11 +644,20 @@ export default function DashboardPage() {
                                 {inv.status}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{inv.method}</TableCell>
+                            <TableCell className="text-right flex items-center justify-end gap-2">
+                               {inv.status !== 'Paid' && (
+                                 <Button variant="ghost" size="sm" className="h-8 px-2 text-primary hover:text-primary hover:bg-primary/10" onClick={() => handleUpdateInvoiceStatus(inv.id, 'Paid')}>
+                                    <CheckCircle className="h-4 w-4 mr-1" /> Mark Paid
+                                 </Button>
+                               )}
+                               <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteInvoice(inv.id)}>
+                                 <Trash2 className="h-4 w-4" />
+                               </Button>
+                            </TableCell>
                           </TableRow>
                         ))}
                         {!invoices?.length && (
-                          <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">No invoices found.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">No invoices recorded yet.</TableCell></TableRow>
                         )}
                       </TableBody>
                     </Table>
@@ -525,8 +671,8 @@ export default function DashboardPage() {
             <div className="space-y-6 animate-in fade-in duration-500">
                <div className="flex items-center justify-between">
                   <div className="space-y-1">
-                    <h1 className="text-2xl font-bold tracking-tight">Expense Tracking</h1>
-                    <p className="text-sm text-muted-foreground">Manage your organization's operational costs.</p>
+                    <h1 className="text-2xl font-bold tracking-tight">Expenses</h1>
+                    <p className="text-sm text-muted-foreground">Track and categorize business spending.</p>
                   </div>
                   {canManageExpenses && (
                     <Button className="gap-2" variant="outline" onClick={() => setIsExpenseDialogOpen(true)}>
@@ -535,15 +681,16 @@ export default function DashboardPage() {
                   )}
                </div>
 
-               <Card className="border-none shadow-sm">
+               <Card className="border-none shadow-sm overflow-hidden">
                  <CardContent className="p-0">
                     <Table>
                       <TableHeader>
-                        <TableRow>
+                        <TableRow className="bg-accent/10">
                           <TableHead>Description</TableHead>
                           <TableHead>Date</TableHead>
                           <TableHead>Category</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -553,10 +700,15 @@ export default function DashboardPage() {
                             <TableCell className="text-muted-foreground">{new Date(exp.createdAt).toLocaleDateString()}</TableCell>
                             <TableCell><Badge variant="outline">{exp.category}</Badge></TableCell>
                             <TableCell className="text-right font-bold text-destructive">-{formatCurrency(exp.amount)}</TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteExpense(exp.id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         ))}
                         {!expenses?.length && (
-                          <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground">No expenses recorded yet.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">No expenses recorded yet.</TableCell></TableRow>
                         )}
                       </TableBody>
                     </Table>
@@ -571,12 +723,12 @@ export default function DashboardPage() {
                <div className="flex items-center justify-between">
                   <div className="space-y-1">
                     <h1 className="text-2xl font-bold tracking-tight">Staff Management</h1>
-                    <p className="text-sm text-muted-foreground">Control access and roles for your team members.</p>
+                    <p className="text-sm text-muted-foreground">Manage roles and permissions for your team.</p>
                   </div>
                </div>
 
                <div className="grid lg:grid-cols-3 gap-6">
-                 <Card className="lg:col-span-1 border-none shadow-sm">
+                 <Card className="lg:col-span-1 border-none shadow-sm h-fit">
                    <CardHeader>
                      <CardTitle className="text-lg">Invite Member</CardTitle>
                    </CardHeader>
@@ -596,20 +748,20 @@ export default function DashboardPage() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <Button className="w-full gap-2" onClick={handleInviteStaff} disabled={!newStaffEmail}>
+                      <Button className="w-full gap-2" disabled={!newStaffEmail}>
                         <UserPlus className="h-4 w-4" /> Send Invitation
                       </Button>
                    </CardContent>
                  </Card>
 
-                 <Card className="lg:col-span-2 border-none shadow-sm">
+                 <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden">
                    <CardHeader>
                      <CardTitle className="text-lg">Team Roster</CardTitle>
                    </CardHeader>
                    <CardContent className="p-0">
                       <Table>
                         <TableHeader>
-                          <TableRow>
+                          <TableRow className="bg-accent/10">
                             <TableHead>User</TableHead>
                             <TableHead>Role</TableHead>
                             <TableHead>Status</TableHead>
@@ -621,9 +773,9 @@ export default function DashboardPage() {
                             <TableRow key={m.id}>
                               <TableCell className="font-medium">{m.email}</TableCell>
                               <TableCell className="capitalize">{m.role}</TableCell>
-                              <TableCell><Badge variant="secondary" className="bg-green-100 text-green-700 hover:bg-green-100">Active</Badge></TableCell>
+                              <TableCell><Badge variant="secondary" className="bg-green-100 text-green-700">Active</Badge></TableCell>
                               <TableCell className="text-right">
-                                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" disabled={m.userId === user.uid}>
+                                <Button variant="ghost" size="icon" className="text-muted-foreground" disabled={m.userId === user.uid}>
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </TableCell>
@@ -641,26 +793,30 @@ export default function DashboardPage() {
           {activeTab === 'settings' && (
             <div className="space-y-6 animate-in fade-in duration-500 max-w-2xl">
                <div className="space-y-1">
-                  <h1 className="text-2xl font-bold tracking-tight">Account Settings</h1>
-                  <p className="text-sm text-muted-foreground">Manage your profile and business preferences.</p>
+                  <h1 className="text-2xl font-bold tracking-tight text-primary">Account Settings</h1>
+                  <p className="text-sm text-muted-foreground">Manage your profile and business information.</p>
                </div>
 
                <Card className="border-none shadow-sm">
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                       <Building className="h-5 w-5 text-primary" /> Business Profile
+                    <CardTitle className="text-lg flex items-center gap-2 text-primary">
+                       <Building className="h-5 w-5" /> Organization Details
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="space-y-2">
-                       <label className="text-sm font-medium">Organization Name</label>
+                       <label className="text-sm font-medium">Business Name</label>
                        <div className="flex gap-2">
                          <Input defaultValue={organization?.name} id="org-name-input" />
-                         <Button onClick={() => handleUpdateOrgName((document.getElementById('org-name-input') as HTMLInputElement).value)}>Save</Button>
+                         <Button onClick={() => {
+                            const val = (document.getElementById('org-name-input') as HTMLInputElement).value;
+                            if (orgId) updateDocumentNonBlocking(doc(db, 'organizations', orgId), { name: val });
+                            toast({ title: "Updated", description: "Business name saved." });
+                         }}>Save</Button>
                        </div>
                     </div>
                     <div className="pt-4 border-t space-y-4">
-                       <h3 className="text-sm font-bold">Personal Profile</h3>
+                       <h3 className="text-sm font-bold text-muted-foreground uppercase">Personal Profile</h3>
                        <div className="flex items-center gap-4 p-4 bg-accent/30 rounded-lg">
                           <Avatar className="h-12 w-12">
                              <AvatarImage src={user.photoURL || ''} />
@@ -678,11 +834,10 @@ export default function DashboardPage() {
                <Card className="border-none shadow-sm border-destructive/20">
                   <CardHeader>
                     <CardTitle className="text-lg text-destructive">Danger Zone</CardTitle>
-                    <CardDescription>Actions here cannot be undone.</CardDescription>
                   </CardHeader>
                   <CardContent>
                      <Button variant="destructive" className="gap-2">
-                        Deactivate Organization
+                        Deactivate LedgerStream Instance
                      </Button>
                   </CardContent>
                </Card>
